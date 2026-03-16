@@ -1,8 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { sendRedirect, getHeader, defineEventHandler } from 'h3'
 import type { H3Event } from 'h3'
-import type { McpToolDefinition, McpResourceDefinition, McpPromptDefinition, McpMiddleware } from './definitions'
-import { registerToolFromDefinition, registerResourceFromDefinition, registerPromptFromDefinition } from './definitions'
+import type { McpMiddleware } from './definitions/handlers'
+import type { McpPromptDefinition } from './definitions/prompts'
+import { registerPromptFromDefinition } from './definitions/prompts'
+import type { McpResourceDefinition } from './definitions/resources'
+import { registerResourceFromDefinition } from './definitions/resources'
+import type { McpToolDefinition } from './definitions/tools'
+import { registerToolFromDefinition } from './definitions/tools'
 // @ts-expect-error - Generated template that re-exports from provider
 import handleMcpRequest from '#nuxt-mcp-toolkit/transport.mjs'
 
@@ -25,6 +30,20 @@ function resolveConfig(config: CreateMcpHandlerConfig, event: H3Event): Resolved
   return typeof config === 'function' ? config(event) : config
 }
 
+function registerEmptyDefinitionFallbacks(server: McpServer, config: ResolvedMcpConfig) {
+  if (!config.tools?.length) {
+    server.registerTool('__init__', {}, async () => ({ content: [] })).remove()
+  }
+
+  if (!config.resources?.length) {
+    server.registerResource('__init__', 'noop://init', {}, async () => ({ contents: [] })).remove()
+  }
+
+  if (!config.prompts?.length) {
+    server.registerPrompt('__init__', {}, async () => ({ messages: [] })).remove()
+  }
+}
+
 export function createMcpServer(config: ResolvedMcpConfig): McpServer {
   const server = new McpServer({
     name: config.name,
@@ -42,6 +61,8 @@ export function createMcpServer(config: ResolvedMcpConfig): McpServer {
   for (const prompt of (config.prompts || []) as McpPromptDefinition[]) {
     registerPromptFromDefinition(server, prompt)
   }
+
+  registerEmptyDefinitionFallbacks(server, config)
 
   return server
 }
