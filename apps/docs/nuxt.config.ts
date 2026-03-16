@@ -21,6 +21,10 @@ export default defineNuxtConfig({
     },
   },
 
+  routeRules: {
+    '/core-concepts/configuration': { redirect: '/getting-started/configuration' },
+  },
+
   experimental: {
     asyncContext: true,
   },
