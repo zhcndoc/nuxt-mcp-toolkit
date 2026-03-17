@@ -87,9 +87,7 @@ export const apikey = pgTable(
     configId: text('config_id').default('default').notNull(),
     name: text('name'),
     start: text('start'),
-    referenceId: text('reference_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    referenceId: text('reference_id').notNull(),
     prefix: text('prefix'),
     key: text('key').notNull(),
     refillInterval: integer('refill_interval'),
@@ -115,17 +113,9 @@ export const apikey = pgTable(
   ],
 )
 
-export const apikeyRelations = relations(apikey, ({ one }) => ({
-  user: one(user, {
-    fields: [apikey.referenceId],
-    references: [user.id],
-  }),
-}))
-
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
-  apikeys: many(apikey),
 }))
 
 export const sessionRelations = relations(session, ({ one }) => ({
