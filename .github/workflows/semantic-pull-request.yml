@@ -35,7 +35,7 @@ jobs:
             docs
             enhancement
             chore
-            performance
+            perf
             style
             test
             refactor
