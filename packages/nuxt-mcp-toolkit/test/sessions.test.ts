@@ -101,4 +101,25 @@ describe('Session Management', async () => {
     expect(sessionTool).toBeDefined()
     expect(sessionTool?.description).toBe('A tool for testing session management')
   })
+
+  it('should persist server-side state within a session across tool calls', async () => {
+    const { client } = await createSessionClient()
+
+    await client.callTool({ name: 'store_value', arguments: { key: 'color', value: 'blue' } })
+    const result = await client.callTool({ name: 'get_value', arguments: { key: 'color' } })
+
+    const content = result.content as Array<{ type: string, text?: string }>
+    expect(content[0]?.text).toBe('blue')
+  })
+
+  it('should share server-side state between sessions using the same server process', async () => {
+    const { client: client1 } = await createSessionClient()
+    const { client: client2 } = await createSessionClient()
+
+    await client1.callTool({ name: 'store_value', arguments: { key: 'shared', value: 'hello' } })
+    const result = await client2.callTool({ name: 'get_value', arguments: { key: 'shared' } })
+
+    const content = result.content as Array<{ type: string, text?: string }>
+    expect(content[0]?.text).toBe('hello')
+  })
 })

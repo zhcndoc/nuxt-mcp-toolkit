@@ -54,5 +54,6 @@ export default defineNuxtConfig({
 
   mcp: {
     name: 'Playground MCP',
+    sessions: true,
   },
 })
