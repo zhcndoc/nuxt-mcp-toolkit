@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import type { H3Event } from 'h3'
 import { useStorage } from 'nitropack/runtime'
 import { getHeader, toWebRequest } from '../compat'
 // @ts-expect-error - Generated template
@@ -35,16 +36,24 @@ function ensureCleanup(maxDuration: number) {
   }, 60_000)
 }
 
+function onResponseClose(event: H3Event, fn: () => void) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodeRes = (event as any).node?.res
+  if (nodeRes && typeof nodeRes.on === 'function') {
+    nodeRes.on('close', fn)
+  }
+}
+
 export default createMcpTransportHandler(async (createServer, event) => {
   const sessionsConfig = config.sessions
   const sessionsEnabled = sessionsConfig?.enabled ?? false
-  const request = await toWebRequest(event)
+  const request = toWebRequest(event)
 
   if (!sessionsEnabled) {
     const server = createServer()
     event.context._mcpServer = server
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
-    event.node.res.on('close', () => {
+    onResponseClose(event, () => {
       transport.close()
       server.close()
     })
@@ -99,7 +108,7 @@ export default createMcpTransportHandler(async (createServer, event) => {
   const response = await transport.handleRequest(request)
 
   if (!sessionStored) {
-    event.node.res.on('close', () => {
+    onResponseClose(event, () => {
       transport.close()
       server.close()
     })

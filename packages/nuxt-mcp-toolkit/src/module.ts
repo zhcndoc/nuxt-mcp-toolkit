@@ -243,6 +243,11 @@ export default defineNuxtModule<ModuleOptions>({
       if (!nuxt.options.dev) {
         isCloudflare = cfPreset
       }
+
+      // secure-exec is an optional lazy-loaded dependency for Code Mode
+      nitroConfig.externals ??= {}
+      nitroConfig.externals.external ??= []
+      nitroConfig.externals.external.push('secure-exec')
     })
 
     addServerTemplate({

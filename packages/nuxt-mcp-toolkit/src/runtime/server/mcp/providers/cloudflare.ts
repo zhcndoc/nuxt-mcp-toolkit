@@ -24,7 +24,7 @@ export default createMcpTransportHandler(async (createServer, event) => {
   const handler = createMcpHandler(server as any, {
     route: '', // allow any route
   }) // version mismatch
-  const request = await toWebRequest(event)
+  const request = toWebRequest(event)
   const cf = event.context.cloudflare as CloudflareContext | undefined
   return handler(request, cf?.env ?? {}, cf?.ctx ?? fallbackCtx)
 })
