@@ -11,6 +11,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "turbo run dev --filter=@nuxtjs/mcp-toolkit-playground",
+    "dev:starter": "turbo run dev --filter=@nuxtjs/mcp-toolkit-starter",
     "dev:prepare": "turbo run dev:prepare",
     "dev:docs": "turbo run dev --filter=@nuxtjs/mcp-toolkit-docs",
     "build": "turbo run build",

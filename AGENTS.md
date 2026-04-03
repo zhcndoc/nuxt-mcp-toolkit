@@ -16,7 +16,8 @@ nuxt-mcp-toolkit/
 │   └── nuxt-mcp-toolkit/     # Main module (published as @nuxtjs/mcp-toolkit)
 ├── apps/
 │   ├── docs/                 # Documentation site (mcp-toolkit.nuxt.dev)
-│   └── playground/           # Development playground for testing
+│   ├── playground/           # Development playground for testing
+│   └── mcp-starter/        # Minimal MCP template (`pnpm dev:starter`)
 ```
 
 ## Development Environment Setup
@@ -40,6 +41,9 @@ pnpm run dev
 
 # Start the docs site
 pnpm run dev:docs
+
+# Start the minimal MCP starter
+pnpm run dev:starter
 ```
 
 ## Common Commands
@@ -49,6 +53,7 @@ Run from the repository root:
 | Command | Description |
 |---------|-------------|
 | `pnpm dev` | Start the playground app |
+| `pnpm dev:starter` | Start the minimal MCP starter app |
 | `pnpm dev:docs` | Start the documentation site |
 | `pnpm build` | Build all packages |
 | `pnpm build:module` | Build only the module |
@@ -98,6 +103,10 @@ apps/docs/server/mcp/
 ### Playground (`apps/playground/`)
 
 A full-featured example app demonstrating module usage with authentication, todos, and various MCP definitions.
+
+### MCP Starter (`apps/mcp-starter/`)
+
+A minimal Nuxt app with one tool, one resource, and one prompt (explicit `@nuxtjs/mcp-toolkit/server` imports). Readers scaffold **only** this folder via giget/tiged (see [apps/mcp-starter/README.md](apps/mcp-starter/README.md)). Short blog paste: [PROMPT.md](apps/mcp-starter/PROMPT.md). In the monorepo, run **`pnpm build:module`** before `pnpm dev:starter` so `server` exports exist.
 
 ## Code Style and Conventions
 
