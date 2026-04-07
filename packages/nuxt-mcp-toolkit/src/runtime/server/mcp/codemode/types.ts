@@ -10,6 +10,21 @@ export interface CodeModeOptions {
   /** Max result size in bytes before truncation. Default: 102400 (100KB) */
   maxResultSize?: number
   /**
+   * Max bytes accepted in a single RPC request body from the sandbox. Default: 1_048_576 (1MB).
+   * Applied when the Code Mode RPC server first starts; later values are ignored until `disposeCodeMode()`.
+   */
+  maxRequestBodyBytes?: number
+  /** Max bytes for a single tool RPC response before truncation. Default: 1_048_576 (1MB) */
+  maxToolResponseSize?: number
+  /**
+   * Deadline for each execution (epoch-based). Checked at the start of every sandbox→host RPC request.
+   * After it passes, the next tool or return RPC gets HTTP 408. Pure isolate CPU time is still capped by `cpuTimeLimitMs`.
+   * Default: 60_000 (60s)
+   */
+  wallTimeLimitMs?: number
+  /** Max tool RPC calls per execution. Default: 200 */
+  maxToolCalls?: number
+  /**
    * Enable progressive disclosure: exposes a `search` tool for discovering
    * available tools, keeping the `code` tool description lightweight.
    * Recommended when the server exposes many tools (50+).
