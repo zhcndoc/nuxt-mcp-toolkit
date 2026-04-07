@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@nuxtjs/mcp-toolkit': workspace:*
+
 importers:
 
   .:
@@ -46,7 +49,7 @@ importers:
         version: 12.8.0
       docus:
         specifier: ^5.9.0
-        version: 5.9.0(5e55a8ab934e5d8424317c17c22591c7)
+        version: 5.9.0(332b1987b7638310f5bb25b340b234cb)
       minimark:
         specifier: ^1.0.0
         version: 1.0.0
@@ -79,8 +82,8 @@ importers:
   apps/mcp-starter:
     dependencies:
       '@nuxtjs/mcp-toolkit':
-        specifier: ^0.13.3
-        version: 0.13.3(@cfworker/json-schema@4.1.1)(agents@0.9.0(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/workers-types@4.20260329.1)(ai@6.0.149(zod@4.3.6))(react@19.2.4)(rolldown@1.0.0-rc.12(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1))(vite@7.3.1(@types/node@25.5.2)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6))(h3@2.0.1-rc.11)(magicast@0.5.2)(secure-exec@0.2.1)(zod@4.3.6)
+        specifier: workspace:*
+        version: link:../../packages/nuxt-mcp-toolkit
       nuxt:
         specifier: ^4.4.2
         version: 4.4.2(ce9ce43f958eb4bdc19c2ea9f273401b)
@@ -15010,7 +15013,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  docus@5.9.0(5e55a8ab934e5d8424317c17c22591c7):
+  docus@5.9.0(332b1987b7638310f5bb25b340b234cb):
     dependencies:
       '@ai-sdk/gateway': 3.0.91(zod@4.3.6)
       '@ai-sdk/mcp': 1.0.35(zod@4.3.6)

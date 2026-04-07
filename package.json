@@ -42,5 +42,10 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "pnpm": {
+    "overrides": {
+      "@nuxtjs/mcp-toolkit": "workspace:*"
+    }
+  }
 }
