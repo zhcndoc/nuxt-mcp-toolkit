@@ -30,6 +30,21 @@ function makeTool(name: string, description: string, inputSchema?: Record<string
   }
 }
 
+function makeToolWithOutput(
+  name: string,
+  description: string,
+  inputSchema: Record<string, z.ZodTypeAny>,
+  outputSchema: Record<string, z.ZodTypeAny>,
+): McpToolDefinition {
+  return {
+    name,
+    description,
+    inputSchema,
+    outputSchema,
+    handler: async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
+  }
+}
+
 const sampleTools = [
   makeTool('get-user', 'Get a user by ID', { id: z.string() }),
   makeTool('list-users', 'List all users'),
@@ -81,6 +96,49 @@ describe('generateTypesFromTools', () => {
 
     expect(toolNameMap.get('delete_todo')).toBe('delete-todo')
     expect(toolNameMap.get('search_products')).toBe('search-products')
+  })
+})
+
+describe('output type generation', () => {
+  it('generates inline return type from small outputSchema', () => {
+    const tools = [makeToolWithOutput('create-item', 'Create', { title: z.string() }, { id: z.string(), ok: z.boolean() })]
+    const { typeDefinitions } = generateTypesFromTools(tools)
+    expect(typeDefinitions).toContain('Promise<{ id: string; ok: boolean }>')
+    expect(typeDefinitions).not.toContain('interface CreateItemOutput')
+  })
+
+  it('quotes output property names that are not TS-safe identifiers', () => {
+    const tools = [makeToolWithOutput('get-meta', 'Meta', {}, {
+      'repo-name': z.string(),
+      'default': z.boolean(),
+    })]
+    const { typeDefinitions } = generateTypesFromTools(tools)
+    expect(typeDefinitions).toContain('Promise<{ "repo-name": string; "default": boolean }>')
+  })
+
+  it('generates named output interface for complex schemas', () => {
+    const tools = [makeToolWithOutput('get-report', 'Report', {}, {
+      id: z.string(),
+      title: z.string(),
+      status: z.enum(['draft', 'published']),
+      views: z.number(),
+    })]
+    const { typeDefinitions } = generateTypesFromTools(tools)
+    expect(typeDefinitions).toContain('interface GetReportOutput')
+    expect(typeDefinitions).toContain('Promise<GetReportOutput>')
+  })
+
+  it('defaults to Promise<unknown> when no outputSchema', () => {
+    const tools = [makeTool('list-items', 'List items')]
+    const { typeDefinitions } = generateTypesFromTools(tools)
+    expect(typeDefinitions).toContain('Promise<unknown>')
+    expect(typeDefinitions).not.toContain('Output')
+  })
+
+  it('catalog entries reflect output types in signatures', () => {
+    const tools = [makeToolWithOutput('create-item', 'Create', { title: z.string() }, { id: z.string(), ok: z.boolean() })]
+    const { entries } = generateToolCatalog(tools)
+    expect(entries[0]!.signature).toContain('Promise<{ id: string; ok: boolean }>')
   })
 })
 
