@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm run dev:prepare && cd apps/docs && NITRO_PRESET=static pnpm run generate",
+  "framework": null,
+  "installCommand": "npm install -g pnpm && pnpm install",
+  "outputDirectory": "apps/docs/.output/public"
+}

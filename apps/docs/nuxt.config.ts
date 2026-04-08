@@ -9,10 +9,21 @@ export default defineNuxtConfig({
     '@vercel/speed-insights',
   ],
 
+  app: {
+    head: {
+      script: [
+        {
+          src: 'https://www.zhcndoc.com/js/common.js',
+          async: true,
+        },
+      ],
+    },
+  },
+
   css: ['~/assets/css/main.css'],
 
   site: {
-    name: 'Nuxt MCP Toolkit',
+    name: 'Nuxt MCP Toolkit 中文文档',
   },
 
   mdc: {
@@ -50,17 +61,17 @@ export default defineNuxtConfig({
   },
 
   llms: {
-    domain: 'https://mcp-toolkit.nuxt.dev',
-    title: 'Nuxt MCP Toolkit',
-    description: 'Create MCP servers directly in your Nuxt application. Define tools, resources, and prompts with a simple and intuitive API.',
+    domain: 'https://nuxt-mcp-toolkit.zhcndoc.com',
+    title: 'Nuxt MCP Toolkit 中文文档',
+    description: '在 Nuxt 应用中直接创建 MCP 服务器。使用简洁直观的 API 定义工具、资源和提示词。',
     full: {
-      title: 'Nuxt MCP Toolkit',
-      description: 'Create MCP servers directly in your Nuxt application. Define tools, resources, and prompts with a simple and intuitive API.',
+      title: 'Nuxt MCP Toolkit 中文文档',
+      description: '在 Nuxt 应用中直接创建 MCP 服务器。使用简洁直观的 API 定义工具、资源和提示词。',
     },
   },
 
   mcp: {
-    name: 'Nuxt MCP Toolkit',
+    name: 'Nuxt MCP Toolkit 中文文档',
   },
 
   studio: {

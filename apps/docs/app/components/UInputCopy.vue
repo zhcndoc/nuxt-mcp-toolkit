@@ -31,7 +31,7 @@ const { copy, copied } = useClipboard()
           :padded="false"
           :ui="{ leadingIcon: 'size-4' }"
           :class="{ 'text-primary hover:text-primary/80': copied }"
-          aria-label="copy button"
+          aria-label="复制按钮"
           @click="copy(value)"
         />
       </template>

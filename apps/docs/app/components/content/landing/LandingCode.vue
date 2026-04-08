@@ -1,11 +1,11 @@
 <script setup lang="ts">
 const features = [
-  { title: 'Tools', description: 'Create executable functions that allow AI models to perform actions and retrieve information.', icon: 'i-lucide-hammer' },
-  { title: 'Resources', description: 'Share data like files, database records or API responses as context for AI models.', icon: 'i-lucide-file-text' },
-  { title: 'Prompts', description: 'Build reusable templates and workflows to guide AI interactions and standardize usage.', icon: 'i-lucide-terminal-square' },
+  { title: '工具', description: '创建可执行函数，使 AI 模型能够执行操作并检索信息。', icon: 'i-lucide-hammer' },
+  { title: '资源', description: '共享数据，如文件、数据库记录或 API 响应，作为 AI 模型的上下文。', icon: 'i-lucide-file-text' },
+  { title: '提示词', description: '构建可重用的模板和工作流，以指导 AI 交互并标准化使用。', icon: 'i-lucide-terminal-square' },
 ]
 
-const tabs = ['Tools', 'Resources', 'Prompts'] as const
+const tabs = ['工具', '资源', '提示词'] as const
 const activeTab = ref(0)
 </script>
 

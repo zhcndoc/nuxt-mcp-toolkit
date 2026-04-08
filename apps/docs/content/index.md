@@ -1,79 +1,79 @@
 ---
 seo:
   ogImage: /og.jpg
-  title: Expose your application to any LLM
-  description: Add a Model Context Protocol (MCP) server to your Nuxt application. Connect your features to AI clients with a Nitro-like Developer Experience.
+  title: 将您的应用暴露给任意大语言模型
+  description: 为您的 Nuxt 应用添加模型上下文协议（MCP）服务器。以类似 Nitro 的开发体验，将您的功能连接到 AI 客户端。
 ---
 
 ::landing-hero
 ---
 command: npx skills add https://mcp-toolkit.nuxt.dev
 installCommand: npx nuxt module add mcp-toolkit
-linkLabel: Get Started
+linkLabel: 开始使用
 linkTo: /getting-started/installation
 ---
 #title
-Expose your application to any AI
+将您的应用暴露给任意 AI
 
 #description
-Add a Model Context Protocol (MCP) server to your Nuxt application. Connect your features to AI clients with a Nitro-like Developer Experience.
+为您的 Nuxt 应用添加模型上下文协议（MCP）服务器。以类似 Nitro 的开发体验，将您的功能连接到 AI 客户端。
 ::
 
 ::landing-features
 #title
-Make your App accessible to AI
+让您的应用对 AI 开放
 
 #description
-Use the Model Context Protocol to standardize how LLMs interact with your Nuxt application.
+使用模型上下文协议来标准化 LLM 与您的 Nuxt 应用的交互方式。
 
 #features
-:landing-feature-item{description="Use familiar patterns like defineMcpTool and defineMcpResource. It feels just like writing API routes." icon="i-lucide-code-2" title="Nitro-like API" to="/core-concepts/tools"}
+:landing-feature-item{description="使用 defineMcpTool 和 defineMcpResource 等熟悉的模式。感觉就像在编写 API 路由。" icon="i-lucide-code-2" title="类 Nitro API" to="/core-concepts/tools"}
 
-:landing-feature-item{description="Automatic discovery of tools, resources and prompts. Just create files in the server/mcp directory." icon="i-lucide-sparkles" title="Zero Configuration" to="/getting-started/installation"}
+:landing-feature-item{description="自动发现工具、资源和提示词。只需在 server/mcp 目录中创建文件即可。" icon="i-lucide-sparkles" title="零配置" to="/getting-started/installation"}
 
-:landing-feature-item{description="Define your tools with Zod schemas and full TypeScript inference. No more guessing argument types." icon="i-lucide-shield-check" title="Type-Safe Tools" to="/advanced/typescript"}
+:landing-feature-item{description="使用 Zod 模式定义工具并支持完整的 TypeScript 类型推断。无需再猜测参数类型。" icon="i-lucide-shield-check" title="类型安全工具" to="/advanced/typescript"}
 
-:landing-feature-item{description="Built on the official MCP SDK, ensuring compatibility with all MCP clients like Claude, Cursor, ChatGPT and more." icon="i-lucide-check-circle-2" title="Standard Compatible" to="/getting-started/connection"}
+:landing-feature-item{description="基于官方 MCP SDK 构建，确保与 Claude、Cursor、ChatGPT 等所有 MCP 客户端兼容。" icon="i-lucide-check-circle-2" title="标准兼容" to="/getting-started/connection"}
 
-:landing-feature-item{description="Let LLMs write JavaScript that orchestrates tools in a secure V8 sandbox. Cut token overhead by up to 82%." icon="i-lucide-terminal" title="Code Mode" to="/advanced/code-mode"}
+:landing-feature-item{description="让 LLM 在安全的 V8 沙箱中编写 JavaScript 来编排工具。最多可减少 82% 的 Token 开销。" icon="i-lucide-terminal" title="代码模式" to="/advanced/code-mode"}
 
-:landing-feature-item{description="Intercept requests to add authentication, logging and rate limiting. Access event context from your tools." icon="i-lucide-shield" title="Middleware" to="/advanced/middleware"}
+:landing-feature-item{description="拦截请求以添加身份验证、日志记录和速率限制。从您的工具中访问事件上下文。" icon="i-lucide-shield" title="中间件" to="/advanced/middleware"}
 
-:landing-feature-item{description="Cache tool and resource responses with Nitro. Just add cache: '1h' to any definition." icon="i-lucide-zap" title="Built-in Cache" to="/core-concepts/tools#response-caching"}
+:landing-feature-item{description="使用 Nitro 缓存工具和资源的响应。只需在任何定义中添加 cache: '1h' 即可。" icon="i-lucide-zap" title="内置缓存" to="/core-concepts/tools#response-caching"}
 
-:landing-feature-item{description="Persist state across tool calls with useMcpSession(). Build multi-step workflows and track conversations." icon="i-lucide-save" title="Sessions" to="/advanced/sessions"}
+:landing-feature-item{description="使用 useMcpSession() 在工具调用之间持久化状态。构建多步骤工作流并跟踪对话。" icon="i-lucide-save" title="会话" to="/advanced/sessions"}
 
-:landing-feature-item{description="Show different tools per user with enabled guards. Control visibility based on authentication, roles or context." icon="i-lucide-toggle-right" title="Dynamic Definitions" to="/advanced/dynamic-definitions"}
+:landing-feature-item{description="通过启用守卫为不同用户显示不同的工具。基于身份验证、角色或上下文控制可见性。" icon="i-lucide-toggle-right" title="动态定义" to="/advanced/dynamic-definitions"}
 
-:landing-feature-item{description="InstallButton component, SVG badges and deeplinks to let users add your MCP server to their IDE instantly." icon="i-lucide-download" title="1-Click Install" to="/getting-started/connection"}
+:landing-feature-item{description="提供 InstallButton 组件、SVG 徽章和深度链接，让用户能够立即将您的 MCP 服务器添加到他们的 IDE 中。" icon="i-lucide-download" title="一键安装" to="/getting-started/connection"}
 
-:landing-feature-item{description="Create separate MCP endpoints with their own tools, resources and configuration. Organize by domain or version." icon="i-lucide-server" title="Multiple Handlers" to="/core-concepts/handlers"}
+:landing-feature-item{description="创建具有各自工具、资源和配置的独立 MCP 端点。按领域或版本进行组织。" icon="i-lucide-server" title="多处理器" to="/core-concepts/handlers"}
 
-:landing-feature-item{description="Verify LLMs call the right tools with the AI SDK and Evalite. Catch regressions before they reach production." icon="i-lucide-flask-conical" title="Evals" to="/advanced/evals"}
+:landing-feature-item{description="使用 AI SDK 和 Evalite 验证 LLM 是否调用了正确的工具。在问题进入生产环境前捕获回归。" icon="i-lucide-flask-conical" title="评估测试" to="/advanced/evals"}
 
-:landing-feature-item{description="Let AI assistants help you build, review and troubleshoot your MCP server with the Agent Skills specification." icon="i-lucide-wand-2" title="Agent Skills" to="/getting-started/agent-skills"}
+:landing-feature-item{description="借助 Agent Skills 规范，让 AI 助手帮助您构建、审查和排查 MCP 服务器问题。" icon="i-lucide-wand-2" title="智能体技能" to="/getting-started/agent-skills"}
 
-:landing-feature-item{description="Organize tools, resources and prompts into groups with tags. Auto-inferred from subdirectories or set explicitly." icon="i-lucide-tags" title="Groups & Tags" to="/core-concepts/tools#groups-and-tags"}
+:landing-feature-item{description="使用标签将工具、资源和提示词组织成组。可从子目录自动推断或显式设置。" icon="i-lucide-tags" title="分组与标签" to="/core-concepts/tools#groups-and-tags"}
 
-:landing-feature-item{description="Debug your MCP server in real-time with the built-in inspector. View tools, resources, prompts, connections and logs." icon="i-lucide-bug" title="DevTools Integrated" to="/getting-started/inspector"}
+:landing-feature-item{description="使用内置检查器实时调试您的 MCP 服务器。查看工具、资源、提示词、连接和日志。" icon="i-lucide-bug" title="集成开发工具" to="/getting-started/inspector"}
 
   :::landing-feature-cta
   ---
   icon: i-lucide-arrow-right
-  label: Get Started
+  label: 开始使用
   to: /getting-started/installation
   ---
   #title
-  Start building now
+  立即开始构建
   :::
 ::
 
 ::landing-code
 #title
-Just Write Code
+只需编写代码
 
 #description
-Define tools, resources and prompts using standard TypeScript files. No complex configuration or boilerplate required.
+使用标准的 TypeScript 文件定义工具、资源和提示词。无需复杂的配置或样板代码。
 
 #tools
 ```ts
@@ -128,26 +128,26 @@ export default defineMcpPrompt({
 ::landing-dev-tools
 ---
 darkImage: /mcp-devtools-dark.png
-imageAlt: Nuxt MCP DevTools
+imageAlt: Nuxt MCP 开发工具
 lightImage: /mcp-devtools-light.png
 ---
 #title
-Built-in Inspector
+内置检查器
 
 #description
-Debug your MCP server in real-time. View registered tools, resources, and prompts, and monitor client connections and request logs.
+实时调试您的 MCP 服务器。查看已注册的工具、资源和提示词，并监控客户端连接和请求日志。
 ::
 
 ::landing-cta
 ---
 links:
-  - label: Get Started
+  - label: 开始使用
     to: /getting-started/installation
     icon: i-lucide-arrow-right
     trailing: true
     color: neutral
     size: xl
-  - label: Star on GitHub
+  - label: 在 GitHub 上 Star
     to: https://github.com/nuxt-modules/mcp-toolkit
     icon: i-lucide-github
     trailing: true
@@ -156,8 +156,8 @@ links:
     size: xl
 ---
 #title
-Ready to build your first MCP Server?
+准备好构建您的第一个 MCP 服务器了吗？
 
 #description
-Get started in minutes with our comprehensive guide and examples.
+通过我们全面的指南和示例，在几分钟内快速上手。
 ::

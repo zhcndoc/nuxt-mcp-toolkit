@@ -7,7 +7,7 @@ const route = useRoute()
     <UButton
       v-if="route.path === '/'"
       to="/getting-started/installation"
-      label="Get Started"
+      label="开始使用"
       variant="ghost"
       trailing
       icon="i-lucide-arrow-right"

@@ -69,7 +69,7 @@ async function copyCommand() {
       />
       <UButton
         v-if="linkTo"
-        :label="linkLabel || 'Get Started'"
+        :label="linkLabel || '开始使用'"
         :to="linkTo"
       />
     </template>

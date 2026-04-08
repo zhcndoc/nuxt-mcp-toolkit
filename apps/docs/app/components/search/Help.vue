@@ -44,13 +44,13 @@ const socialLinks = [
     <div class="flex flex-col gap-4">
       <div class="flex flex-col gap-2">
         <p class="text-sm text-muted">
-          I'm sorry, I don't know how to answer your question. {{ reason }}
+          很抱歉，我不知道如何回答您的问题。{{ reason }}
         </p>
         <h3 class="text-sm font-semibold text-highlighted">
-          Need more help?
+          需要更多帮助？
         </h3>
         <p class="text-sm text-muted">
-          Ask your question to the Nuxt community or check our support channels.
+          您可以向 Nuxt 社区提问，或者查看我们的支持渠道。
         </p>
       </div>
 
@@ -60,20 +60,20 @@ const socialLinks = [
       >
         <UInput
           v-model="input"
-          placeholder="Ask a question to the team..."
+          placeholder="请输入您的问题..."
           :ui="{ base: 'w-full' }"
         />
         <UButton
           type="submit"
           :disabled="!input.trim()"
-          label="Submit Question"
+          label="提交问题"
           class="w-fit self-end"
         />
       </form>
 
       <div class="flex flex-col gap-2 pt-2 border-t border-default">
         <p class="text-xs text-dimmed font-medium">
-          Or reach out on:
+          或者通过以下渠道联系：
         </p>
         <div class="flex flex-wrap gap-2">
           <UButton
@@ -104,7 +104,7 @@ const socialLinks = [
         class="size-8 mx-auto mb-2 animate-spin"
       />
       <div class="text-sm text-muted">
-        Loading help interface...
+        正在加载帮助界面...
       </div>
     </div>
   </div>
