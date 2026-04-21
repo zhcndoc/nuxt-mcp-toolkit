@@ -54,10 +54,11 @@
     "tinyglobby": "^0.2.16"
   },
   "peerDependencies": {
-    "h3": ">=1.15.11",
-    "zod": "^4.1.13",
     "agents": ">=0.11.4",
-    "secure-exec": ">=0.2.1"
+    "evlog": "^2.13.0",
+    "h3": ">=1.15.11",
+    "secure-exec": ">=0.2.1",
+    "zod": "^4.1.13"
   },
   "peerDependenciesMeta": {
     "h3": {
@@ -67,6 +68,9 @@
       "optional": false
     },
     "agents": {
+      "optional": true
+    },
+    "evlog": {
       "optional": true
     },
     "secure-exec": {
@@ -81,6 +85,7 @@
     "@nuxt/test-utils": "^4.0.2",
     "@types/node": "latest",
     "eslint": "^9.39.4",
+    "evlog": "^2.13.0",
     "nuxt": "^4.4.2",
     "typescript": "~6.0.3",
     "vitest": "^4.1.4",

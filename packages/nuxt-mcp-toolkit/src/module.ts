@@ -108,6 +108,27 @@ export interface ModuleOptions {
    * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#security-warning
    */
   security?: McpSecurityConfig
+  /**
+   * Server-side observability powered by the optional [evlog](https://evlog.dev) peer dependency.
+   *
+   * Behavior:
+   * - `undefined` (default): **auto-detect**. If `evlog` is installed, it is
+   *   wired into Nitro automatically and `useMcpLogger().set()` / `.event()` /
+   *   `.evlog` start feeding the request-scoped wide event. Otherwise it stays
+   *   off — only `useMcpLogger().notify(...)` (the client channel) works.
+   * - `true`: force on. If `evlog` is not installed, the build throws with
+   *   install instructions.
+   * - object: force on with options forwarded to the evlog Nitro module.
+   *   Same install requirement as `true`.
+   * - `false`: force off. `set()` / `event()` / `evlog` throw on use.
+   *
+   * @see https://evlog.dev
+   */
+  logging?: boolean | ({
+    /** Service name advertised on every wide event. Defaults to `options.name || 'mcp-server'`. */
+    service?: string
+    [key: string]: unknown
+  })
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -145,6 +166,88 @@ export default defineNuxtModule<ModuleOptions>({
       nitroOptions.storage ??= {}
       nitroOptions.storage['mcp:sessions'] ??= { driver: 'memory' }
       nitroOptions.storage['mcp:sessions-meta'] ??= { driver: 'memory' }
+    }
+
+    const loggingExplicit = options.logging !== undefined
+    const loggingForcedOff = options.logging === false
+    const loggingForcedOn = options.logging === true || (typeof options.logging === 'object' && options.logging !== null)
+
+    let evlogAvailable = false
+    if (!loggingForcedOff) {
+      try {
+        const moduleRequire = createRequire(import.meta.url)
+        moduleRequire.resolve('evlog/nitro')
+        evlogAvailable = true
+      }
+      catch {
+        // evlog not installed — fall through. Only an error if explicitly forced on.
+      }
+    }
+
+    if (loggingForcedOn && !evlogAvailable) {
+      throw new Error(
+        '[@nuxtjs/mcp-toolkit] `mcp.logging` is enabled but the optional `evlog` peer dependency is not installed. '
+        + 'Run `pnpm add evlog` (or `npm install evlog` / `yarn add evlog` / `bun add evlog`) to enable server-side observability, '
+        + 'or set `mcp.logging: false` to opt out.',
+      )
+    }
+
+    const loggingActive = evlogAvailable && !loggingForcedOff
+    if (loggingActive && nitroOptions) {
+      const { default: evlogNitro } = await import('evlog/nitro') as typeof import('evlog/nitro')
+      const loggingOptions = (typeof options.logging === 'object' && options.logging) || {}
+      const { service, ...evlogOptions } = loggingOptions as { service?: string, env?: Record<string, unknown>, [key: string]: unknown }
+      const resolvedService = service ?? options.name ?? 'mcp-server'
+
+      const evlogModule = evlogNitro({
+        ...evlogOptions,
+        env: {
+          ...(evlogOptions.env as Record<string, unknown> | undefined),
+          service: (evlogOptions.env as { service?: string } | undefined)?.service ?? resolvedService,
+        },
+      })
+
+      // Wrap the evlog module so we can roll back its `noExternals: true` flag
+      // after setup. evlog forces bundling of its runtime, but that flag also
+      // tries to bundle every other dependency (`drizzle-kit`, native modules,
+      // …) which breaks integrations like `@nuxthub/core`. We just need
+      // evlog's *own* package inlined, so we reset the global flag and add
+      // evlog to the inline list instead. The MCP-specific context tagging
+      // happens directly in `createMcpHandler` (see `runtime/server/mcp/utils`),
+      // so we don't need a separate Nitro plugin here — that avoids ordering
+      // issues with evlog's own request hook.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wrappedEvlogModule: any = {
+        name: 'evlog',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async setup(nitro: any) {
+          const previousNoExternals = nitro.options.noExternals
+          await evlogModule.setup?.(nitro)
+          nitro.options.noExternals = previousNoExternals ?? false
+          nitro.options.externals ??= {}
+          nitro.options.externals.inline = Array.from(new Set([
+            ...(nitro.options.externals.inline ?? []),
+            'evlog',
+            'evlog/nitro',
+          ]))
+        },
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(nuxt.hook as any)('nitro:config', (nitroConfig: any) => {
+        nitroConfig.modules ??= []
+        if (!nitroConfig.modules.some((m: unknown) => typeof m === 'object' && m !== null && 'name' in m && (m as { name: string }).name === 'evlog')) {
+          nitroConfig.modules.push(wrappedEvlogModule)
+        }
+      })
+
+      log.info(`Observability enabled · evlog wide events on \`${options.route ?? '/mcp'}\``)
+    }
+    else if (loggingExplicit && loggingForcedOff) {
+      log.info('Observability disabled (`mcp.logging: false`) · `useMcpLogger().notify` still active')
+    }
+    else if (!evlogAvailable) {
+      log.info('Observability inactive · install `evlog` to enable wide-event tracing — `useMcpLogger().notify` still works')
     }
 
     if (options.autoImports !== false) {
@@ -296,6 +399,7 @@ export default defineNuxtModule<ModuleOptions>({
     const mcpSessionPath = resolver.resolve('runtime/server/mcp/session')
     const mcpServerPath = resolver.resolve('runtime/server/mcp/server')
     const mcpElicitationPath = resolver.resolve('runtime/server/mcp/elicitation')
+    const mcpLoggerPath = resolver.resolve('runtime/server/mcp/logger')
 
     if (options.autoImports !== false) {
       addServerImports([
@@ -324,6 +428,7 @@ export default defineNuxtModule<ModuleOptions>({
         { name: 'invalidateMcpSession', from: mcpSessionPath },
         { name: 'useMcpServer', from: mcpServerPath },
         { name: 'useMcpElicitation', from: mcpElicitationPath },
+        { name: 'useMcpLogger', from: mcpLoggerPath },
       ])
     }
 
