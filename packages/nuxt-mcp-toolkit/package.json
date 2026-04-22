@@ -1,6 +1,6 @@
 {
   "name": "@nuxtjs/mcp-toolkit",
-  "version": "0.13.3",
+  "version": "0.14.0",
   "description": "Create MCP servers directly in your Nuxt application. Define tools, resources, and prompts with a simple and intuitive API.",
   "repository": {
     "type": "git",
@@ -51,13 +51,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@nuxt/kit": "^4.4.2",
-    "tinyglobby": "^0.2.15"
+    "tinyglobby": "^0.2.16"
   },
   "peerDependencies": {
+    "agents": ">=0.11.4",
+    "evlog": "^2.13.0",
     "h3": ">=1.15.11",
-    "zod": "^4.1.13",
-    "agents": ">=0.9.0",
-    "secure-exec": ">=0.2.1"
+    "secure-exec": ">=0.2.1",
+    "zod": "^4.1.13"
   },
   "peerDependenciesMeta": {
     "h3": {
@@ -69,6 +70,9 @@
     "agents": {
       "optional": true
     },
+    "evlog": {
+      "optional": true
+    },
     "secure-exec": {
       "optional": true
     }
@@ -78,13 +82,14 @@
     "@nuxt/eslint-config": "^1.15.2",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.4.2",
-    "@nuxt/test-utils": "^4.0.0",
+    "@nuxt/test-utils": "^4.0.2",
     "@types/node": "latest",
     "eslint": "^9.39.4",
+    "evlog": "^2.13.0",
     "nuxt": "^4.4.2",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.2",
-    "vue-tsc": "^3.2.6"
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.4",
+    "vue-tsc": "^3.2.7"
   },
   "publishConfig": {
     "access": "public"

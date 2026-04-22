@@ -350,6 +350,96 @@ See [detailed middleware guide →](./references/middleware.md)
 
 ---
 
+## Interactive Composables
+
+### `useMcpElicitation()`
+
+Ask the connected client for structured input mid-request, or send the user to a URL.
+
+```typescript
+import { z } from 'zod'
+
+export default defineMcpTool({
+  name: 'create_release',
+  inputSchema: { name: z.string() },
+  handler: async ({ name }) => {
+    const elicit = useMcpElicitation()
+
+    const result = await elicit.form({
+      message: `Pick a channel for "${name}"`,
+      schema: {
+        channel: z.enum(['stable', 'beta']).describe('Release channel'),
+      },
+    })
+
+    if (result.action !== 'accept') return 'Cancelled.'
+    return `Released "${name}" on ${result.content.channel}.`
+  },
+})
+```
+
+- **Form mode**: pass a Zod raw shape, the response is validated and typed.
+- **URL mode**: `elicit.url({ message, url })` — opt-in per spec, gate with `elicit.supports('url')`.
+- **Confirm**: `await elicit.confirm('Continue?')` returns a boolean.
+- **Capability check**: `elicit.supports('form' | 'url')` — always `false` before init completes.
+- **Errors**: catch `McpElicitationError` (`code: 'unsupported' | 'invalid-schema' | 'invalid-response'`) to fall back when the client doesn't support elicitation.
+- Schema must be a **flat object of primitives** (string/number/boolean), enums, or string-enum arrays — nested objects are rejected by the spec.
+
+See [elicitation docs →](https://mcp-toolkit.nuxt.dev/advanced/elicitation)
+
+---
+
+## Observability
+
+### `useMcpLogger()`
+
+Split-channel logger: notify the connected client and capture structured wide events (powered by [evlog](https://evlog.dev), an **optional peer dependency** — install with `pnpm add evlog` to enable wide events).
+
+```typescript
+export default defineMcpTool({
+  name: 'charge_card',
+  inputSchema: { userId: z.string(), amount: z.number().int() },
+  handler: async ({ userId, amount }) => {
+    const log = useMcpLogger('billing')
+
+    // → server-side wide event (dev terminal + drains)
+    log.set({ user: { id: userId }, billing: { amount } })
+    log.event('charge_started', { amount })
+
+    // → MCP client (Inspector / Cursor / Claude)
+    await log.notify.info({ msg: 'starting charge', amount })
+
+    const receipt = await charge(userId, amount)
+    return `Charged ${amount}.`
+  },
+})
+```
+
+- **Client channel** (`log.notify`): `notify(level, data, logger?)` plus `notify.debug` / `notify.info` / `notify.warning` / `notify.error` shortcuts. Always resolves, never throws — respects the client's `logging/setLevel` per session. Works with or without `evlog`.
+- **Server channel** (requires `evlog` installed): `set(fields)` accumulates context onto the request's wide event; `event(name, fields?)` captures a discrete event; `evlog` exposes the full request logger. These throw `McpObservabilityNotEnabledError` when observability is off.
+- Wide events are auto-tagged with `mcp.transport`, `mcp.route`, `mcp.session_id`, `mcp.method`, `mcp.request_id`, and `mcp.tool` / `mcp.resource` / `mcp.prompt` based on the JSON-RPC payload (no user code required).
+- `mcp.logging` modes: omit (auto-detect — on if `evlog` installed), `true` / object (force on, throws at build if missing), `false` (force off — `notify` keeps working).
+
+#### Ship to a backend (drains)
+
+Ship every MCP wide event to **Axiom, Sentry, OTLP, HyperDX, Datadog, Better Stack, or PostHog** with a single Nitro plugin. Each adapter lives under `evlog/adapters/*` and is registered on the `evlog:drain` hook:
+
+```typescript [server/plugins/evlog-axiom.ts]
+import { createAxiomDrain } from 'evlog/adapters/axiom'
+
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('evlog:drain', createAxiomDrain())
+})
+```
+
+The hook is additive — register multiple drains in parallel. Custom drains are just `(ctx) => Promise<void>` registered on the same hook.
+
+See [evlog.dev →](https://evlog.dev) for the full list of adapters, env-var conventions, sampling, and redaction.
+
+See [logging docs →](https://mcp-toolkit.nuxt.dev/advanced/logging)
+
+---
+
 ## Review & Best Practices
 
 ### MCP code review (agents & humans)

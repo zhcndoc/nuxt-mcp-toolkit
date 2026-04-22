@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { eventHandler, sendRedirect } from 'h3'
+import { eventHandler, readBody, sendRedirect } from 'h3'
 import type { H3Event } from 'h3'
 import type { McpMiddleware, McpIcon } from './definitions/handlers'
 import type { McpPromptDefinition } from './definitions/prompts'
@@ -9,8 +9,8 @@ import { registerResourceFromDefinition } from './definitions/resources'
 import type { McpToolDefinition, McpToolDefinitionListItem } from './definitions/tools'
 import { registerToolFromDefinition } from './definitions/tools'
 import type { CodeModeOptions } from './codemode'
-import { getHeader } from './compat'
-// @ts-expect-error - Generated template that re-exports from provider
+import { getHeader, getRequestMethod } from './compat'
+import { getEvlogLogger } from './internals'
 import handleMcpRequest from '#nuxt-mcp-toolkit/transport.mjs'
 
 export type { McpTransportHandler } from './providers/types'
@@ -114,6 +114,9 @@ export async function createMcpServer(config: StaticMcpConfig): Promise<McpServe
     icons: config.icons,
   }, {
     instructions: config.instructions,
+    capabilities: {
+      logging: {},
+    },
   })
 
   let toolsToRegister: McpToolDefinition[] = config.tools as McpToolDefinition[]
@@ -141,9 +144,113 @@ export async function createMcpServer(config: StaticMcpConfig): Promise<McpServe
   return server
 }
 
+interface JsonRpcMessage {
+  method?: unknown
+  id?: unknown
+  params?: Record<string, unknown> | null
+}
+
+interface RpcSummary {
+  methods: string[]
+  ids: (string | number)[]
+  tools: string[]
+  resources: string[]
+  prompts: string[]
+}
+
+function summarizeRpcBody(body: unknown): RpcSummary | undefined {
+  if (!body) return undefined
+  const messages = (Array.isArray(body) ? body : [body]) as JsonRpcMessage[]
+  const summary: RpcSummary = {
+    methods: [],
+    ids: [],
+    tools: [],
+    resources: [],
+    prompts: [],
+  }
+
+  for (const msg of messages) {
+    if (!msg || typeof msg !== 'object') continue
+    if (typeof msg.method === 'string') summary.methods.push(msg.method)
+    if (typeof msg.id === 'string' || typeof msg.id === 'number') summary.ids.push(msg.id)
+
+    const params = msg.params
+    if (params && typeof params === 'object') {
+      const name = typeof params.name === 'string' ? params.name : undefined
+      const uri = typeof params.uri === 'string' ? params.uri : undefined
+      if (msg.method === 'tools/call' && name) summary.tools.push(name)
+      if (msg.method === 'resources/read' && uri) summary.resources.push(uri)
+      if (msg.method === 'prompts/get' && name) summary.prompts.push(name)
+    }
+  }
+
+  if (
+    !summary.methods.length
+    && !summary.tools.length
+    && !summary.resources.length
+    && !summary.prompts.length
+    && !summary.ids.length
+  ) return undefined
+
+  return summary
+}
+
+function pickOne<T>(values: T[]): T | T[] | undefined {
+  if (!values.length) return undefined
+  if (values.length === 1) return values[0]
+  return values
+}
+
+/**
+ * Tag the request-scoped evlog wide event with MCP-specific context.
+ *
+ * Captures session, transport, route, and (when the body is a JSON-RPC
+ * payload) the method, request id, and tool/resource/prompt names. Runs
+ * from the handler so it executes after evlog's `request` plugin has
+ * populated `event.context.log`, regardless of plugin ordering.
+ */
+async function tagEvlogContext(event: H3Event, route: string) {
+  const log = getEvlogLogger(event)
+  if (!log) return
+
+  const sessionId = getHeader(event, 'mcp-session-id')
+  const mcp: Record<string, unknown> = {
+    transport: 'streamable-http',
+    route,
+  }
+  if (sessionId) mcp.session_id = sessionId
+
+  const method = getRequestMethod(event)
+  if (method.toUpperCase() === 'POST') {
+    let summary: RpcSummary | undefined
+    try {
+      summary = summarizeRpcBody(await readBody(event))
+    }
+    catch {
+      // Body unreadable / not JSON — skip enrichment
+    }
+
+    if (summary) {
+      const m = pickOne(summary.methods)
+      const id = pickOne(summary.ids)
+      const tool = pickOne(summary.tools)
+      const resource = pickOne(summary.resources)
+      const prompt = pickOne(summary.prompts)
+      if (m !== undefined) mcp[Array.isArray(m) ? 'methods' : 'method'] = m
+      if (id !== undefined) mcp[Array.isArray(id) ? 'request_ids' : 'request_id'] = id
+      if (tool !== undefined) mcp[Array.isArray(tool) ? 'tools' : 'tool'] = tool
+      if (resource !== undefined) mcp[Array.isArray(resource) ? 'resources' : 'resource'] = resource
+      if (prompt !== undefined) mcp[Array.isArray(prompt) ? 'prompts' : 'prompt'] = prompt
+    }
+  }
+
+  log.set({ mcp })
+}
+
 export function createMcpHandler(config: CreateMcpHandlerConfig) {
   return eventHandler(async (event: H3Event) => {
     const resolvedConfig = resolveConfig(config, event)
+    await tagEvlogContext(event, event.path?.split('?')[0] || '/mcp')
 
     if (getHeader(event, 'accept')?.includes('text/html')) {
       return sendRedirect(event, resolvedConfig.browserRedirect)
