@@ -393,7 +393,7 @@ See [elicitation docs →](https://mcp-toolkit.nuxt.dev/advanced/elicitation)
 
 ### `useMcpLogger()`
 
-Split-channel logger: notify the connected client and capture structured wide events (powered by [evlog](https://evlog.dev), an **optional peer dependency** — install with your package manager; see the [Logging](https://mcp-toolkit.nuxt.dev/advanced/logging) guide).
+Split-channel logger: notify the connected client and capture structured wide events (powered by [evlog](https://evlog.dev) when installed — add it with your package manager; see the [Logging](https://mcp-toolkit.nuxt.dev/advanced/logging) guide).
 
 ```typescript
 export default defineMcpTool({

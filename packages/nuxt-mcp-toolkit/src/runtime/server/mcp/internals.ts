@@ -28,7 +28,7 @@ export function getSdkServerFromHelper(helper: McpServerHelper): SdkServer {
  * Pull the per-request evlog logger off `event.context.log`.
  *
  * The toolkit does not depend on `evlog` at type level (it is an optional
- * peer dep), so we duck-type the candidate before returning it.
+ * optional install), so we duck-type the candidate before returning it.
  *
  * Returns `null` when no event is bound, when evlog isn't installed, or
  * when its Nitro request plugin hasn't run for this request.

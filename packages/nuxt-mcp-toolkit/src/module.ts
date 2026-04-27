@@ -116,7 +116,7 @@ export interface ModuleOptions {
    */
   security?: McpSecurityConfig
   /**
-   * Server-side observability powered by the optional [evlog](https://evlog.dev) peer dependency.
+   * Server-side observability via optional [evlog](https://evlog.dev) — add it to your app when needed (not a peer dep, to avoid npm pulling unrelated framework peers).
    *
    * Behavior:
    * - `undefined` (default): **auto-detect**. If `evlog` is installed, it is
