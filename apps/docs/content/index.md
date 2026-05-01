@@ -1,7 +1,7 @@
 ---
 seo:
   ogImage: /og.jpg
-  title: Expose your application to any LLM
+  title: Expose your Nuxt app to any LLM with MCP — Nuxt MCP Toolkit
   description: Add a Model Context Protocol (MCP) server to your Nuxt application. Connect your features to AI clients with a Nitro-like Developer Experience.
 ---
 
