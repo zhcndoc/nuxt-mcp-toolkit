@@ -1,6 +1,6 @@
 {
   "name": "@nuxtjs/mcp-toolkit",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Create MCP servers directly in your Nuxt application. Define tools, resources, and prompts with a simple and intuitive API.",
   "repository": {
     "type": "git",
@@ -21,6 +21,10 @@
     "./server": {
       "types": "./dist/runtime/server/mcp/definitions/index.d.ts",
       "import": "./dist/runtime/server/mcp/definitions/index.js"
+    },
+    "./app": {
+      "types": "./dist/runtime/app/use-mcp-app.d.ts",
+      "import": "./dist/runtime/app/use-mcp-app.js"
     }
   },
   "main": "./dist/module.mjs",
@@ -31,6 +35,9 @@
       ],
       "server": [
         "./dist/runtime/server/mcp/definitions/index.d.ts"
+      ],
+      "app": [
+        "./dist/runtime/app/use-mcp-app.d.ts"
       ]
     }
   },
@@ -50,14 +57,18 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@nuxt/kit": "^4.4.2",
-    "tinyglobby": "^0.2.16"
+    "@nuxt/kit": "^4.4.4",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "tinyglobby": "^0.2.16",
+    "vite-plugin-singlefile": "^2.3.3"
   },
   "peerDependencies": {
-    "agents": ">=0.11.4",
-    "evlog": "^2.13.0",
+    "@vue/compiler-sfc": "^3.5.33",
+    "agents": ">=0.11.6",
     "h3": ">=1.15.11",
     "secure-exec": ">=0.2.1",
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+    "vue": "^3.5.33",
     "zod": "^4.1.13"
   },
   "peerDependenciesMeta": {
@@ -67,10 +78,16 @@
     "zod": {
       "optional": false
     },
-    "agents": {
+    "@vue/compiler-sfc": {
       "optional": true
     },
-    "evlog": {
+    "vite": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "agents": {
       "optional": true
     },
     "secure-exec": {
@@ -81,14 +98,19 @@
     "@nuxt/devtools": "^3.2.4",
     "@nuxt/eslint-config": "^1.15.2",
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.4.2",
-    "@nuxt/test-utils": "^4.0.2",
+    "@nuxt/schema": "^4.4.4",
+    "@nuxt/test-utils": "^4.0.3",
     "@types/node": "latest",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/compiler-sfc": "^3.5.33",
     "eslint": "^9.39.4",
-    "evlog": "^2.13.0",
-    "nuxt": "^4.4.2",
+    "evlog": "^2.14.0",
+    "nuxt": "^4.4.4",
     "typescript": "~6.0.3",
-    "vitest": "^4.1.4",
+    "vite": "^8.0.10",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^4.1.5",
+    "vue": "^3.5.33",
     "vue-tsc": "^3.2.7"
   },
   "publishConfig": {

@@ -2,11 +2,12 @@ import { addServerHandler, addServerTemplate, createResolver, defineNuxtModule, 
 import { defaultMcpConfig, getMcpConfig } from './runtime/server/mcp/config'
 import { setupAutoImports } from './setup/auto-imports'
 import { buildDefaultPaths, setupDefinitionsLoader } from './setup/definitions'
+import { probeAppsDir } from './setup/mcp-apps/discover'
 import { setupEvlog } from './setup/evlog'
 import { setupNitroAliases } from './setup/nitro-aliases'
 import { name, version } from '../package.json'
 import type { McpIcon } from './runtime/server/mcp/definitions/handlers'
-import type { McpConfig, McpSecurityConfig } from './runtime/server/mcp/config'
+import type { McpConfig, McpDefaultHandlerStrategy, McpSecurityConfig } from './runtime/server/mcp/config'
 
 const log = logger.withTag('@nuxtjs/mcp-toolkit')
 
@@ -73,6 +74,27 @@ export interface ModuleOptions {
    */
   dir?: string
   /**
+   * Base directory for MCP App SFCs relative to Nuxt's app directory.
+   * The module will look for `.vue` files in this directory across layers.
+   * @default 'mcp' (app/mcp)
+   */
+  appsDir?: string
+  /**
+   * How the default `/mcp` handler picks up auto-discovered definitions when
+   * named handlers exist (`server/mcp/handlers/<name>/` or `handlers: 'name'` field).
+   *
+   * - `'orphans'` (default): the default handler only sees definitions that
+   *   aren't attached to a named handler. Each definition lives in exactly
+   *   one place. When no named handlers exist, behaves like `'all'`.
+   * - `'all'`: pre-multi-handler behaviour — the default handler sees every
+   *   discovered definition. Useful when you want a "kitchen sink" route in
+   *   addition to specialized ones.
+   *
+   * @default 'orphans'
+   * @see https://mcp-toolkit.nuxt.dev/handlers/organization
+   */
+  defaultHandlerStrategy?: McpDefaultHandlerStrategy
+  /**
    * Auto-import MCP helpers (`defineMcpTool`, `defineMcpResource`, etc.),
    * types (`McpRequestExtra`, `McpToolExtra`, …), and the `InstallButton` component.
    *
@@ -109,7 +131,7 @@ export interface ModuleOptions {
    */
   security?: McpSecurityConfig
   /**
-   * Server-side observability powered by the optional [evlog](https://evlog.dev) peer dependency.
+   * Server-side observability via optional [evlog](https://evlog.dev) — add it to your app when needed (not a peer dep, to avoid npm pulling unrelated framework peers).
    *
    * Behavior:
    * - `undefined` (default): **auto-detect**. If `evlog` is installed, it is
@@ -165,8 +187,11 @@ export default defineNuxtModule<ModuleOptions>({
 
     await setupEvlog(nuxt, options, log)
 
+    const appsDir = options.appsDir ?? 'mcp'
+    const hasApps = probeAppsDir(appsDir)
+
     if (options.autoImports !== false) {
-      setupAutoImports(resolver)
+      setupAutoImports(resolver, { hasApps })
     }
 
     addServerTemplate({
@@ -174,7 +199,7 @@ export default defineNuxtModule<ModuleOptions>({
       getContents: () => `export default ${JSON.stringify(mcpConfig)}`,
     })
 
-    setupDefinitionsLoader(nuxt, buildDefaultPaths(mcpConfig.dir), options, resolver, log)
+    setupDefinitionsLoader(nuxt, buildDefaultPaths(mcpConfig.dir), options, resolver, log, { appsDir })
 
     registerTypeReferences(nuxt, resolver)
 
@@ -218,4 +243,15 @@ function registerServerHandlers(route: string, resolver: ReturnType<typeof creat
   addServerHandler({ route, handler: resolver.resolve('runtime/server/mcp/handler') })
   addServerHandler({ route: `${route}/deeplink`, handler: resolver.resolve('runtime/server/mcp/deeplink') })
   addServerHandler({ route: `${route}/badge.svg`, handler: resolver.resolve('runtime/server/mcp/badge-image') })
+
+  // OAuth discovery endpoints (RFC 9728 / RFC 8414). MCP clients probe
+  // these on connect; absent a real handler Nuxt would serve an HTML 404
+  // and break clients that try to parse the body as JSON.
+  const oauthHandler = resolver.resolve('runtime/server/mcp/oauth-metadata')
+  addServerHandler({ route: '/.well-known/oauth-protected-resource', handler: oauthHandler })
+  addServerHandler({ route: '/.well-known/oauth-protected-resource/**', handler: oauthHandler })
+  addServerHandler({ route: '/.well-known/oauth-authorization-server', handler: oauthHandler })
+  addServerHandler({ route: '/.well-known/oauth-authorization-server/**', handler: oauthHandler })
+  addServerHandler({ route: '/.well-known/openid-configuration', handler: oauthHandler })
+  addServerHandler({ route: '/.well-known/openid-configuration/**', handler: oauthHandler })
 }

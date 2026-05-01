@@ -13,6 +13,9 @@ export default defineAppConfig({
       title: '相关链接',
     },
   },
+  navigation: {
+    sub: 'header',
+  },
   socials: {
     x: 'https://x.com/nuxt_js',
     discord: 'https://discord.com/invite/ps2h6QT',
@@ -56,6 +59,11 @@ export default defineAppConfig({
     button: {
       slots: {
         base: 'active:translate-y-px transition-transform duration-300',
+      },
+    },
+    contentToc: {
+      defaultVariants: {
+        highlightVariant: 'circuit',
       },
     },
     contentSurround: {

@@ -27,7 +27,7 @@ linkTo: /getting-started/installation
 使用模型上下文协议来标准化 LLM 与您的 Nuxt 应用的交互方式。
 
 #features
-:landing-feature-item{description="使用 defineMcpTool 和 defineMcpResource 等熟悉的模式。感觉就像在编写 API 路由。" icon="i-lucide-code-2" title="类 Nitro API" to="/core-concepts/tools"}
+:landing-feature-item{description="使用熟悉的模式，如 defineMcpTool 和 defineMcpResource。感觉就像在编写 API 路由。" icon="i-lucide-code-2" title="类似 Nitro 的 API" to="/tools/overview"}
 
 :landing-feature-item{description="自动发现工具、资源和提示词。只需在 server/mcp 目录中创建文件即可。" icon="i-lucide-sparkles" title="零配置" to="/getting-started/installation"}
 
@@ -35,11 +35,13 @@ linkTo: /getting-started/installation
 
 :landing-feature-item{description="基于官方 MCP SDK 构建，确保与 Claude、Cursor、ChatGPT 等所有 MCP 客户端兼容。" icon="i-lucide-check-circle-2" title="标准兼容" to="/getting-started/connection"}
 
-:landing-feature-item{description="让 LLM 在安全的 V8 沙箱中编写 JavaScript 来编排工具。最多可减少 82% 的 Token 开销。" icon="i-lucide-terminal" title="代码模式" to="/advanced/code-mode"}
+:landing-feature-item{description="将交互式 UI 组件交付给 AI 主机。在 app/mcp/ 中编写 Vue SFC——由支持 MCP Apps 的主机构建、沙箱化并以内联方式渲染。" icon="i-lucide-app-window" title="MCP Apps" to="/apps/overview"}
+
+:landing-feature-item{description="让 LLM 编写 JavaScript，在安全的 V8 沙箱中协调工具。最多可将 token 开销减少 82%。" icon="i-lucide-terminal" title="代码模式" to="/advanced/code-mode"}
 
 :landing-feature-item{description="拦截请求以添加身份验证、日志记录和速率限制。从您的工具中访问事件上下文。" icon="i-lucide-shield" title="中间件" to="/advanced/middleware"}
 
-:landing-feature-item{description="使用 Nitro 缓存工具和资源的响应。只需在任何定义中添加 cache: '1h' 即可。" icon="i-lucide-zap" title="内置缓存" to="/core-concepts/tools#response-caching"}
+:landing-feature-item{description="使用 Nitro 缓存工具和资源响应。只需在任何定义中添加 cache: '1h'。 " icon="i-lucide-zap" title="内置缓存" to="/tools/errors-caching"}
 
 :landing-feature-item{description="使用 useMcpSession() 在工具调用之间持久化状态。构建多步骤工作流并跟踪对话。" icon="i-lucide-save" title="会话" to="/advanced/sessions"}
 
@@ -47,13 +49,13 @@ linkTo: /getting-started/installation
 
 :landing-feature-item{description="提供 InstallButton 组件、SVG 徽章和深度链接，让用户能够立即将您的 MCP 服务器添加到他们的 IDE 中。" icon="i-lucide-download" title="一键安装" to="/getting-started/connection"}
 
-:landing-feature-item{description="创建具有各自工具、资源和配置的独立 MCP 端点。按领域或版本进行组织。" icon="i-lucide-server" title="多处理器" to="/core-concepts/handlers"}
+:landing-feature-item{description="创建具有各自工具、资源和配置的独立 MCP 端点。按域或版本进行组织。" icon="i-lucide-server" title="多个处理器" to="/handlers/overview"}
 
 :landing-feature-item{description="使用 AI SDK 和 Evalite 验证 LLM 是否调用了正确的工具。在问题进入生产环境前捕获回归。" icon="i-lucide-flask-conical" title="评估测试" to="/advanced/evals"}
 
 :landing-feature-item{description="借助 Agent Skills 规范，让 AI 助手帮助您构建、审查和排查 MCP 服务器问题。" icon="i-lucide-wand-2" title="智能体技能" to="/getting-started/agent-skills"}
 
-:landing-feature-item{description="使用标签将工具、资源和提示词组织成组。可从子目录自动推断或显式设置。" icon="i-lucide-tags" title="分组与标签" to="/core-concepts/tools#groups-and-tags"}
+:landing-feature-item{description="使用标签将工具、资源和提示词组织成分组。可从子目录自动推断，也可显式设置。" icon="i-lucide-tags" title="分组与标签" to="/tools/groups-organization#groups-and-tags"}
 
 :landing-feature-item{description="使用内置检查器实时调试您的 MCP 服务器。查看工具、资源、提示词、连接和日志。" icon="i-lucide-bug" title="集成开发工具" to="/getting-started/inspector"}
 
@@ -81,9 +83,9 @@ linkTo: /getting-started/installation
 import { z } from 'zod'
 
 export default defineMcpTool({
-  description: 'Get current weather for a location',
+  description: '获取某个地点的当前天气',
   inputSchema: {
-    city: z.string().describe('City name'),
+    city: z.string().describe('城市名称'),
     unit: z.enum(['celsius', 'fahrenheit']).default('celsius')
   },
   annotations: { readOnlyHint: true },
@@ -100,7 +102,7 @@ export default defineMcpTool({
 // server/mcp/resources/readme.ts
 export default defineMcpResource({
   file: 'README.md',
-  description: 'The project documentation',
+  description: '项目文档',
   annotations: {
     audience: ['user', 'assistant'],
     lastModified: new Date().toISOString(),
@@ -114,13 +116,13 @@ export default defineMcpResource({
 import { z } from 'zod'
 
 export default defineMcpPrompt({
-  description: 'Summarize a text',
+  description: '总结一段文本',
   inputSchema: {
-    text: z.string().describe('Text to summarize'),
+    text: z.string().describe('待总结文本'),
     format: z.enum(['bullet-points', 'paragraph']).default('paragraph')
   },
   handler: async ({ text, format }) =>
-    `Summarize this text as ${format}:\n\n${text}`
+    `将此文本总结为 ${format}:\n\n${text}`
 })
 ```
 ::

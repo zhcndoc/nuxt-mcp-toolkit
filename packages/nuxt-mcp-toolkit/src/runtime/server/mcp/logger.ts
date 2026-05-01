@@ -55,7 +55,7 @@ export interface McpRequestLogger {
  * - `log.set(...)` / `log.event(...)`: **server-side wide event** fed to
  *   evlog. Pretty-printed in the dev terminal at the end of each request,
  *   shipped to drains (Axiom, Sentry, OTLP, ...) in production. Operator
- *   facing. Requires the optional `evlog` peer dependency to be installed
+ *   facing. Requires the optional `evlog` package to be installed
  *   and `mcp.logging` not explicitly disabled.
  */
 export interface McpLogger {
@@ -69,7 +69,7 @@ export interface McpLogger {
    * Accumulate context onto the current request's evlog wide event.
    *
    * @throws when observability is not active on this request — install
-   * the optional `evlog` peer dependency and make sure `mcp.logging` is
+   * the optional `evlog` package and make sure `mcp.logging` is
    * not set to `false`.
    */
   set: (fields: Record<string, unknown>) => void
@@ -90,7 +90,7 @@ export interface McpLogger {
 
 const OBSERVABILITY_HINT
   = 'Server-side observability is not active on this request. '
-    + 'Install the optional `evlog` peer dependency (`pnpm add evlog`) '
+    + 'Install `evlog` (`pnpm add evlog` or `npm install evlog` / `yarn add evlog` / `bun add evlog`) '
     + 'and make sure `mcp.logging` is not set to `false` in nuxt.config. '
     + '`log.notify.*` (client channel) keeps working without evlog.'
 

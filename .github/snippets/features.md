@@ -1,6 +1,7 @@
-- 🎯 **Zero Configuration** - Automatic discovery of tools, resources, and prompts
-- 📦 **File-based** - Organize definitions in intuitive directory structures
-- 🚀 **Multiple Handlers** - Create multiple MCP endpoints in a single app
-- 🔍 **Built-in Inspector** - Visual debugging tool in Nuxt DevTools
-- 📝 **TypeScript First** - Full type safety with auto-imports
-- 🔒 **Zod Validation** - Built-in input/output validation
+- 🎯 **零配置** - 自动发现工具、资源、提示词和应用
+- 📦 **基于文件** - 以直观的目录结构组织定义
+- 🚀 **多个处理器** - 在单个应用中创建多个 MCP 端点
+- 🖼️ **MCP 应用** - 将交互式 Vue UI 组件发布到兼容 MCP Apps 的主机
+- 🔍 **内置检查器** - Nuxt DevTools 中的可视化调试工具
+- 📝 **TypeScript 优先** - 通过自动导入实现完整的类型安全
+- 🔒 **Zod 验证** - 内置输入/输出验证
