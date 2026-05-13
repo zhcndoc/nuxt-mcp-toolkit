@@ -1,7 +1,7 @@
 ---
 seo:
   ogImage: /og.jpg
-  title: 将您的应用暴露给任意大语言模型
+  title: 通过 MCP 将您的 Nuxt 应用暴露给任意 LLM — Nuxt MCP Toolkit
   description: 为您的 Nuxt 应用添加模型上下文协议（MCP）服务器。以类似 Nitro 的开发体验，将您的功能连接到 AI 客户端。
 ---
 

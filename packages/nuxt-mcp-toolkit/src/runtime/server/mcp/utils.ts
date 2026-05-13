@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { eventHandler, readBody, sendRedirect } from 'h3'
 import type { H3Event } from 'h3'
+import { useNitroApp } from 'nitropack/runtime'
+import { consola } from 'consola'
 import type { McpMiddleware, McpIcon } from './definitions/handlers'
 import type { McpPromptDefinition } from './definitions/prompts'
 import { registerPromptFromDefinition } from './definitions/prompts'
@@ -34,7 +36,14 @@ export interface ResolvedMcpConfig {
   experimental_codeMode?: boolean | CodeModeOptions
 }
 
-interface StaticMcpConfig {
+/**
+ * Fully-resolved MCP server config — `tools` / `resources` / `prompts` are
+ * concrete arrays (no functions), filtered by `enabled(event)` guards.
+ *
+ * This is the shape passed to `mcp:config:resolved` Nitro hook listeners.
+ * Mutating it in place affects what the per-request `McpServer` registers.
+ */
+export interface McpResolvedConfig {
   name: string
   version: string
   description?: string
@@ -68,7 +77,7 @@ async function filterByEnabled<T extends { enabled?: (event: H3Event) => boolean
 async function resolveDynamicDefinitions(
   config: ResolvedMcpConfig,
   event: H3Event,
-): Promise<StaticMcpConfig> {
+): Promise<McpResolvedConfig> {
   const tools = typeof config.tools === 'function'
     ? await config.tools(event)
     : (config.tools || [])
@@ -92,7 +101,7 @@ async function resolveDynamicDefinitions(
   }
 }
 
-function registerEmptyDefinitionFallbacks(server: McpServer, config: StaticMcpConfig) {
+function registerEmptyDefinitionFallbacks(server: McpServer, config: McpResolvedConfig) {
   if (!config.tools.length) {
     server.registerTool('__init__', {}, async () => ({ content: [] })).remove()
   }
@@ -106,7 +115,7 @@ function registerEmptyDefinitionFallbacks(server: McpServer, config: StaticMcpCo
   }
 }
 
-export async function createMcpServer(config: StaticMcpConfig): Promise<McpServer> {
+export async function createMcpServer(config: McpResolvedConfig): Promise<McpServer> {
   const server = new McpServer({
     name: config.name,
     version: config.version,
@@ -201,14 +210,7 @@ function pickOne<T>(values: T[]): T | T[] | undefined {
   return values
 }
 
-/**
- * Tag the request-scoped evlog wide event with MCP-specific context.
- *
- * Captures session, transport, route, and (when the body is a JSON-RPC
- * payload) the method, request id, and tool/resource/prompt names. Runs
- * from the handler so it executes after evlog's `request` plugin has
- * populated `event.context.log`, regardless of plugin ordering.
- */
+/** Tag the wide event with `mcp.*` from the JSON-RPC body and transport headers. */
 async function tagEvlogContext(event: H3Event, route: string) {
   const log = getEvlogLogger(event)
   if (!log) return
@@ -247,6 +249,57 @@ async function tagEvlogContext(event: H3Event, route: string) {
   log.set({ mcp })
 }
 
+function asString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  return undefined
+}
+
+const hookLog = consola.withTag('mcp-toolkit')
+
+/** Fire a Nitro runtime hook, swallowing listener errors so the request continues. */
+async function callMcpHook(
+  name: 'mcp:config:resolved',
+  ctx: { config: McpResolvedConfig, event: H3Event },
+): Promise<void>
+async function callMcpHook(
+  name: 'mcp:server:created',
+  ctx: { server: McpServer, event: H3Event },
+): Promise<void>
+async function callMcpHook(name: string, ctx: unknown): Promise<void> {
+  try {
+    const hooks = useNitroApp().hooks as { callHook: (name: string, ctx: unknown) => Promise<void> }
+    await hooks.callHook(name, ctx)
+  }
+  catch (error) {
+    hookLog.error(`Hook "${name}" threw — request continues`, error)
+  }
+}
+
+/** Tag `user` / `session` from `event.context` (whatever auth middleware set). */
+function tagAuthContext(event: H3Event) {
+  const log = getEvlogLogger(event)
+  if (!log) return
+
+  const ctx = event.context as Record<string, unknown>
+  const userObj = (ctx.user && typeof ctx.user === 'object') ? ctx.user as Record<string, unknown> : undefined
+  const userId = asString(ctx.userId) ?? asString(userObj?.id)
+
+  if (userObj || userId) {
+    const user: Record<string, unknown> = {}
+    if (userId) user.id = userId
+    const email = asString(userObj?.email)
+    if (email) user.email = email
+    const name = asString(userObj?.name)
+    if (name) user.name = name
+    if (Object.keys(user).length > 0) log.set({ user })
+  }
+
+  const sessionObj = (ctx.session && typeof ctx.session === 'object') ? ctx.session as Record<string, unknown> : undefined
+  const sessionId = asString(sessionObj?.id) ?? asString(ctx.sessionId)
+  if (sessionId) log.set({ session: { id: sessionId } })
+}
+
 export function createMcpHandler(config: CreateMcpHandlerConfig) {
   return eventHandler(async (event: H3Event) => {
     const resolvedConfig = resolveConfig(config, event)
@@ -257,8 +310,11 @@ export function createMcpHandler(config: CreateMcpHandlerConfig) {
     }
 
     const handler = async () => {
+      tagAuthContext(event)
       const staticConfig = await resolveDynamicDefinitions(resolvedConfig, event)
+      await callMcpHook('mcp:config:resolved', { config: staticConfig, event })
       const server = await createMcpServer(staticConfig)
+      await callMcpHook('mcp:server:created', { server, event })
       return handleMcpRequest(() => server, event)
     }
 

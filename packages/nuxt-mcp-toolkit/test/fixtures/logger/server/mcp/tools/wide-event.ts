@@ -7,7 +7,7 @@ export default defineMcpTool({
   inputSchema: {},
   handler: async () => {
     const log = useMcpLogger()
-    log.set({ user: { id: 'user-42' } })
+    log.setUser({ id: 'user-42' })
     log.set({ feature: 'logger-test' })
     log.event('charge_started', { amount: 1000 })
 
@@ -18,6 +18,7 @@ export default defineMcpTool({
           type: 'text',
           text: JSON.stringify({
             user: ctx.user,
+            session: ctx.session,
             feature: ctx.feature,
           }),
         },

@@ -1,368 +1,196 @@
-# Middleware & Handlers Guide
+# 中间件模式
 
-Advanced customization of MCP servers with middleware and handlers.
-
-## Middleware Patterns
-
-### Authentication Middleware
+Middleware 位于 `defineMcpHandler` 上——**没有单独的 `defineMcpMiddleware`** 函数。其签名为：
 
 ```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const token = event.headers.get('authorization')?.replace('Bearer ', '')
+type McpMiddleware = (
+  event: H3Event,
+  next: () => Promise<Response>
+) => Promise<Response | void> | Response | void
+```
 
-    if (!token) {
-      return createError({
-        statusCode: 401,
-        message: 'Authentication required',
-      })
-    }
+如果你没有调用 `next()`，它会在你的 middleware 返回后自动调用。如果你需要检查/修改响应或测量耗时，请显式调用它。
 
-    try {
-      const user = await verifyToken(token)
-      event.context.user = user
-      return next()
-    }
-    catch (error) {
-      return createError({
-        statusCode: 401,
-        message: 'Invalid token',
-      })
-    }
+## 将 middleware 放在哪里
+
+| 文件 | 作用 |
+| --- | --- |
+| `server/mcp/index.ts` | 覆盖默认的 `/mcp` 处理器——middleware 会对默认路由的每个请求运行。 |
+| `server/mcp/handlers/<name>/index.ts` | 文件夹处理器——middleware 只会对 `/mcp/<name>` 运行。`handlers/<name>/{tools,resources,prompts}/` 中的 tools/resources/prompts 会自动挂载。 |
+
+## 软认证（推荐）
+
+::callout{icon="i-lucide-triangle-alert" color="warning"}
+**不要** 在 MCP middleware 中 `throw createError({ statusCode: 401 })`——大多数客户端会把 MCP 路由上的 `401` 解释为“此服务器需要 OAuth”，并开始发现流程。相反，请在成功时设置 context，并让每个工具的 `enabled` 守卫隐藏受保护的工具，或者在需要强制拒绝时返回 `403`。
+::
+
+```typescript [server/mcp/index.ts]
+export default defineMcpHandler({
+  middleware: async (event) => {
+    const apiKey = getHeader(event, 'authorization')?.replace('Bearer ', '')
+    if (!apiKey) return
+
+    const user = await verifyApiKey(apiKey).catch(() => null)
+    if (user) event.context.user = user
+    // 不要抛出异常——未认证请求仍然可以看到公共工具
   },
 })
 ```
 
-### Logging Middleware
-
-```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const start = Date.now()
-    const method = event.method
-    const path = event.path
-
-    console.log(`[MCP] ${method} ${path}`)
-
-    const result = await next()
-
-    const duration = Date.now() - start
-    console.log(`[MCP] ${method} ${path} - ${duration}ms`)
-
-    return result
-  },
-})
-```
-
-### CORS Middleware
-
-```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    // Set CORS headers
-    event.node.res.setHeader('Access-Control-Allow-Origin', '*')
-    event.node.res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    event.node.res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-    // Handle preflight
-    if (event.method === 'OPTIONS') {
-      event.node.res.statusCode = 204
-      event.node.res.end()
-      return
-    }
-
-    return next()
-  },
-})
-```
-
-### Request Validation
-
-```typescript
-// server/mcp/middleware.ts
+```typescript [server/mcp/tools/list-todos.ts]
 import { z } from 'zod'
 
-const mcpRequestSchema = z.object({
-  method: z.string(),
-  params: z.any().optional(),
-})
-
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    try {
-      const body = await readBody(event)
-      mcpRequestSchema.parse(body)
-      return next()
-    }
-    catch (error) {
-      return createError({
-        statusCode: 400,
-        message: 'Invalid request format',
-      })
-    }
-  },
-})
-```
-
-## Custom Handlers
-
-### Multiple MCP Endpoints
-
-```typescript
-// server/mcp/handlers/public.ts
-export default defineMcpHandler({
-  name: 'public-mcp',
-  route: '/mcp/public',
-  handler: async (event) => {
-    return {
-      tools: await loadPublicTools(),
-      resources: [],
-      prompts: [],
-    }
-  },
-})
-
-// server/mcp/handlers/admin.ts
-export default defineMcpHandler({
-  name: 'admin-mcp',
-  route: '/mcp/admin',
-  middleware: [checkAdminAuth],
-  handler: async (event) => {
-    return {
-      tools: await loadAdminTools(),
-      resources: [],
-      prompts: [],
-    }
-  },
-})
-```
-
-### Dynamic Tool Loading
-
-```typescript
-// server/mcp/handlers/dynamic.ts
-export default defineMcpHandler({
-  name: 'dynamic-mcp',
-  handler: async (event) => {
-    const user = event.context.user
-
-    // Load tools based on user permissions
-    const tools = await loadToolsForUser(user)
-
-    return {
-      tools,
-      resources: [],
-      prompts: [],
-    }
-  },
-})
-```
-
-### Tool Filtering
-
-```typescript
-// server/mcp/handlers/filtered.ts
-export default defineMcpHandler({
-  name: 'filtered-mcp',
-  handler: async (event) => {
-    const tools = await loadAllTools()
-
-    // Filter based on query params
-    const category = event.query.category
-    const filteredTools = category
-      ? tools.filter(t => t.category === category)
-      : tools
-
-    return {
-      tools: filteredTools,
-      resources: [],
-      prompts: [],
-    }
-  },
-})
-```
-
-## Advanced Patterns
-
-### Request Context
-
-```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    // Add custom context
-    event.context.requestId = crypto.randomUUID()
-    event.context.startTime = Date.now()
-    event.context.user = await getCurrentUser(event)
-
-    return next()
-  },
-})
-
-// Use in tools
-// server/mcp/tools/example.ts
 export default defineMcpTool({
-  handler: async (params, { event }) => {
-    const user = event.context.user
-    const requestId = event.context.requestId
-
-    console.log(`[${requestId}] User ${user.id} called tool`)
-
-    return 'Done'
+  description: '列出当前用户的待办事项',
+  enabled: event => Boolean(event.context.user), // 未认证时隐藏
+  handler: async () => {
+    const event = useEvent()
+    return listTodos(event.context.user.id)
   },
 })
 ```
 
-### Error Handling
+对于一个**应该**展示给 LLM 但无法运行的工具，请返回友好的消息，而不是抛出异常：
 
 ```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    try {
-      return await next()
-    }
-    catch (error) {
-      console.error('MCP Error:', error)
+handler: async () => {
+  const event = useEvent()
+  if (!event.context.user) return '请先登录，然后重新运行此工具。'
+  return listTodos(event.context.user.id)
+}
+```
 
-      // Log to monitoring service
-      await logError(error, {
-        path: event.path,
-        user: event.context.user,
-      })
+## Better Auth API Keys
 
-      return createError({
-        statusCode: 500,
-        message: 'Internal server error',
-      })
+与 [`better-auth`](https://www.better-auth.com) 的 API-key 插件使用相同模式：
+
+```typescript [server/mcp/index.ts]
+import { auth } from '~/lib/auth'
+
+export default defineMcpHandler({
+  middleware: async (event) => {
+    const headers = getRequestHeaders(event)
+    const session = await auth.api.getSession({ headers: new Headers(headers as Record<string, string>) })
+    if (session) {
+      event.context.user = session.user
+      event.context.session = session.session
     }
   },
 })
 ```
 
-### Caching Strategy
+`useMcpLogger()` 会自动使用 `event.context.user` 和 `event.context.session` 中的 `user.id` / `user.email` / `session.id` 为每条宽事件打标签。
+
+## 日志 Middleware（使用 `next()` 进行计时）
+
+使用 `extractToolNames` 从 JSON-RPC body 中捕获调用了哪些工具：
 
 ```typescript
-// server/mcp/middleware.ts
-const cache = new Map()
+import { extractToolNames } from '@nuxtjs/mcp-toolkit/server'
 
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const cacheKey = `${event.method}:${event.path}:${JSON.stringify(event.query)}`
+export default defineMcpHandler({
+  middleware: async (event, next) => {
+    const requestId = crypto.randomUUID()
+    event.context.requestId = requestId
 
-    // Check cache
-    if (cache.has(cacheKey)) {
-      const cached = cache.get(cacheKey)
-      if (Date.now() - cached.timestamp < 60000) { // 1 minute
-        return cached.data
-      }
-    }
+    const start = performance.now()
+    const response = await next()
+    const tools = await extractToolNames(event)
 
-    // Execute and cache
-    const result = await next()
-    cache.set(cacheKey, {
-      data: result,
-      timestamp: Date.now(),
-    })
-
-    return result
+    console.log(`[mcp] ${requestId} ${tools.join(',') || 'rpc'} took ${(performance.now() - start).toFixed(1)}ms`)
+    return response
   },
 })
 ```
 
-## Security Best Practices
+对于每次 MCP 请求都生成结构化宽事件，建议使用 [`useMcpLogger()`](https://mcp-toolkit.nuxt.dev/advanced/logging)——它会自动标记 `mcp.tool`、`mcp.session_id`、`mcp.request_id`、`service` 等。
 
-### API Key Validation
+## 强制拒绝（仅管理员处理器）
 
-```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const apiKey = event.headers.get('x-api-key')
+当 middleware **必须**拒绝时（例如一个永远不应公开的内部管理员端点），返回 `403`——不要返回 `401`：
 
-    // Validate format
-    if (!apiKey || !/^[a-zA-Z0-9-]{32,}$/.test(apiKey)) {
-      return createError({
-        statusCode: 401,
-        message: 'Invalid API key format',
-      })
+```typescript [server/mcp/handlers/admin/index.ts]
+export default defineMcpHandler({
+  description: '管理员工具——仅允许 IP 白名单访问。',
+  middleware: async (event) => {
+    const ip = getRequestIP(event, { xForwardedFor: true })
+    if (!ALLOWED_IPS.includes(ip)) {
+      throw createError({ statusCode: 403, message: '禁止访问' })
     }
-
-    // Check against database
-    const isValid = await validateApiKey(apiKey)
-    if (!isValid) {
-      return createError({
-        statusCode: 401,
-        message: 'Invalid API key',
-      })
-    }
-
-    return next()
   },
 })
 ```
 
-### Rate Limiting per User
+## 限流
+
+可依赖 [`nitro-rate-limit`](https://github.com/atinux/nitro-rate-limit)，或使用 `useStorage` 驱动实现按用户计数器——把工作放到 middleware 之外，这样其他工具的缓存仍能正常工作：
 
 ```typescript
-// server/mcp/middleware.ts
-const userLimits = new Map()
+const counters = new Map<string, { count: number, resetAt: number }>()
 
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const userId = event.context.user?.id
-    if (!userId) return next()
-
+export default defineMcpHandler({
+  middleware: async (event) => {
+    const userId = event.context.user?.id ?? getRequestIP(event)
     const now = Date.now()
-    const window = 60000 // 1 minute
+    const window = 60_000
     const limit = 100
 
-    const userRequests = userLimits.get(userId) || []
-    const recentRequests = userRequests.filter(t => now - t < window)
-
-    if (recentRequests.length >= limit) {
-      return createError({
-        statusCode: 429,
-        message: 'Rate limit exceeded',
-        headers: {
-          'X-RateLimit-Limit': limit,
-          'X-RateLimit-Remaining': 0,
-          'X-RateLimit-Reset': Math.ceil((recentRequests[0] + window) / 1000),
-        },
-      })
+    const bucket = counters.get(userId) ?? { count: 0, resetAt: now + window }
+    if (now > bucket.resetAt) {
+      bucket.count = 0
+      bucket.resetAt = now + window
     }
+    bucket.count++
+    counters.set(userId, bucket)
 
-    userLimits.set(userId, [...recentRequests, now])
-    return next()
+    if (bucket.count > limit) {
+      throw createError({ statusCode: 429, message: '超过速率限制' })
+    }
   },
 })
 ```
 
-### Input Sanitization
+## CORS
+
+跨域浏览器客户端由 `mcp.security.allowedOrigins` 进行限制。请在 `nuxt.config.ts` 中配置，而不是通过 middleware：
+
+```typescript [nuxt.config.ts]
+export default defineNuxtConfig({
+  mcp: {
+    security: {
+      allowedOrigins: ['https://app.example.com'], // 或使用 '*' 以禁用 Origin 检查（请谨慎使用）
+    },
+  },
+})
+```
+
+## 组合多个关注点
+
+Middleware 只有一个函数，但你可以组合辅助函数：
 
 ```typescript
-// server/mcp/middleware.ts
-export default defineMcpMiddleware({
-  handler: async (event, next) => {
-    const body = await readBody(event)
+async function withAuth(event: H3Event) {
+  const apiKey = getHeader(event, 'authorization')?.replace('Bearer ', '')
+  if (!apiKey) return
+  const user = await verifyApiKey(apiKey).catch(() => null)
+  if (user) event.context.user = user
+}
 
-    // Sanitize inputs
-    if (body.params) {
-      body.params = sanitizeObject(body.params)
-    }
+async function withRequestId(event: H3Event) {
+  event.context.requestId = crypto.randomUUID()
+}
 
-    // Prevent injection attacks
-    if (typeof body.params === 'string' && containsSQLInjection(body.params)) {
-      return createError({
-        statusCode: 400,
-        message: 'Invalid input detected',
-      })
-    }
-
+export default defineMcpHandler({
+  middleware: async (event, next) => {
+    await withAuth(event)
+    await withRequestId(event)
     return next()
   },
 })
 ```
+
+## 另请参阅
+
+- [Middleware 文档](https://mcp-toolkit.nuxt.dev/advanced/middleware)
+- [认证示例](https://mcp-toolkit.nuxt.dev/examples/authentication)
+- [日志](https://mcp-toolkit.nuxt.dev/advanced/logging) — `useMcpLogger()` 和 evlog
