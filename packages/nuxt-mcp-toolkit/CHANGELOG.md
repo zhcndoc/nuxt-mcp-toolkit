@@ -1,5 +1,17 @@
 # @nuxtjs/mcp-toolkit
 
+## 0.17.1
+
+### Patch Changes
+
+- [#261](https://github.com/nuxt-modules/mcp-toolkit/pull/261) [`500c43e`](https://github.com/nuxt-modules/mcp-toolkit/commit/500c43e6ef0befdff47e2c574f8615594c68e47e) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix "spawn npx ENOENT" error when launching the MCP Inspector on Windows.
+
+  Since the Node.js CVE-2024-27980 mitigation (Node 18.20.2 / 20.12.2), `child_process.spawn` no longer resolves `.cmd`/`.bat` shims on Windows without `shell: true`. This caused the DevTools "Launch Inspector" button to throw `ENOENT` on every Windows machine.
+
+  `shell: true` is now passed only when `process.platform === 'win32'`, leaving the default behaviour unchanged on Linux and macOS.
+
+  Closes [#259](https://github.com/nuxt-modules/mcp-toolkit/issues/259).
+
 ## 0.17.0
 
 ### Minor Changes
