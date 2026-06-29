@@ -1,10 +1,10 @@
-Use `nuxt` to install the module automatically:
+使用 `nuxt` 自动安装该模块：
 
 ```bash
-npx nuxt module add mcp-toolkit
+npx nuxt add mcp
 ```
 
-Or install manually:
+或者手动安装：
 
 ```bash
 # npm

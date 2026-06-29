@@ -1,14 +1,14 @@
 ---
 seo:
   ogImage: /og.jpg
-  title: 通过 MCP 将您的 Nuxt 应用暴露给任意 LLM — Nuxt MCP Toolkit
+  title: 通过 MCP 将您的 Nuxt 应用暴露给任意 LLM — Nuxt MCP 工具包
   description: 为您的 Nuxt 应用添加模型上下文协议（MCP）服务器。以类似 Nitro 的开发体验，将您的功能连接到 AI 客户端。
 ---
 
 ::landing-hero
 ---
 command: npx skills add https://mcp-toolkit.nuxt.dev
-installCommand: npx nuxt module add mcp-toolkit
+installCommand: npx nuxt add mcp
 linkLabel: 开始使用
 linkTo: /getting-started/installation
 ---
@@ -35,7 +35,7 @@ linkTo: /getting-started/installation
 
 :landing-feature-item{description="基于官方 MCP SDK 构建，确保与 Claude、Cursor、ChatGPT 等所有 MCP 客户端兼容。" icon="i-lucide-check-circle-2" title="标准兼容" to="/getting-started/connection"}
 
-:landing-feature-item{description="将交互式 UI 组件交付给 AI 主机。在 app/mcp/ 中编写 Vue SFC——由支持 MCP Apps 的主机构建、沙箱化并以内联方式渲染。" icon="i-lucide-app-window" title="MCP Apps" to="/apps/overview"}
+:landing-feature-item{description="将交互式 UI 组件交付给 AI 主机。在 app/mcp/ 中编写 Vue SFC——由支持 MCP Apps 的主机构建、沙箱化并以内联方式渲染。" icon="i-lucide-app-window" title="MCP 应用" to="/apps/overview"}
 
 :landing-feature-item{description="让 LLM 编写 JavaScript，在安全的 V8 沙箱中协调工具。最多可将 token 开销减少 82%。" icon="i-lucide-terminal" title="代码模式" to="/advanced/code-mode"}
 
