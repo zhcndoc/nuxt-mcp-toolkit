@@ -1,0 +1,123 @@
+import { attachContext } from './context.ts'
+import { resolveIdentity, resolveMeta } from './validate.ts'
+import type {
+  CacheHint,
+  Icon,
+  ReadResourceResult,
+  ResourceMetadata,
+  ResourceTemplate,
+  ServerContext,
+  Variables,
+} from '@modelcontextprotocol/server'
+import type { McpEvent } from './context.ts'
+import type { McpResource } from './definition.ts'
+
+type Awaitable<T> = T | Promise<T>
+
+/**
+ * What a resource handler may return: the text of the resource, or a full
+ * protocol result when it carries several contents or binary data.
+ */
+export type McpResourceReturn = ReadResourceResult | string
+
+interface McpResourceMetadata {
+  /** Derived from the filename when discovered. */
+  name?: string
+  title?: string
+  description?: string
+  /** Inferred from the subdirectory when discovered, e.g. `resources/docs/*`. */
+  group?: string
+  /** Free-form labels, advertised in `_meta` for clients to filter on. */
+  tags?: string[]
+  mimeType?: string
+  icons?: Icon[]
+  /** Advertised to clients so they may cache the read. */
+  cacheHint?: CacheHint
+}
+
+export interface McpResourceDefinition extends McpResourceMetadata {
+  /** A concrete URI, e.g. `docs://changelog`. */
+  uri: string
+  handler: (uri: URL, event: McpEvent) => Awaitable<McpResourceReturn>
+}
+
+export interface McpResourceTemplateDefinition extends McpResourceMetadata {
+  /** A `ResourceTemplate` whose placeholders are resolved per read. */
+  uri: ResourceTemplate
+  handler: (uri: URL, variables: Variables, event: McpEvent) => Awaitable<McpResourceReturn>
+}
+
+function toReadResult(uri: URL, value: McpResourceReturn): ReadResourceResult {
+  return typeof value === 'string' ? { contents: [{ uri: uri.href, text: value }] } : value
+}
+
+// `uri` is a `string` or a class instance, neither of which is a unit type, so
+// the union needs a predicate rather than an inline `typeof` check to narrow.
+function isStatic(
+  definition: McpResourceDefinition | McpResourceTemplateDefinition,
+): definition is McpResourceDefinition {
+  return typeof definition.uri === 'string'
+}
+
+/**
+ * Define an MCP resource: data a client can read by URI.
+ *
+ * @example
+ * ```ts
+ * export default defineMcpResource({
+ *   name: 'changelog',
+ *   uri: 'docs://changelog',
+ *   handler: () => readFile('CHANGELOG.md', 'utf8'),
+ * })
+ * ```
+ */
+export function defineMcpResource(definition: McpResourceDefinition): McpResource
+export function defineMcpResource(definition: McpResourceTemplateDefinition): McpResource
+export function defineMcpResource(
+  definition: McpResourceDefinition | McpResourceTemplateDefinition,
+): McpResource {
+  const { name, title, description, group, tags, mimeType, icons, cacheHint } = definition
+  const isStaticUri = isStatic(definition)
+
+  return {
+    kind: 'resource',
+    name,
+    title,
+    description,
+    group,
+    tags,
+    uri: isStaticUri ? definition.uri : definition.uri.uriTemplate.toString(),
+    register(server, identity) {
+      const resolved = resolveIdentity('resource', definition, identity)
+      const config: ResourceMetadata & { cacheHint?: CacheHint } = {
+        title: resolved.title,
+        description,
+        mimeType,
+        icons,
+        cacheHint,
+        _meta: resolveMeta(resolved.group, tags),
+      }
+
+      if (isStaticUri) {
+        const { uri: staticUri, handler } = definition
+        server.registerResource(
+          resolved.name,
+          staticUri,
+          config,
+          async (url: URL, ctx: ServerContext) =>
+            toReadResult(url, await handler(url, attachContext(ctx))),
+        )
+        return
+      }
+
+      const { uri: template, handler } = definition
+      server.registerResource(
+        resolved.name,
+        template,
+        config,
+        async (url: URL, variables: Variables, ctx: ServerContext) =>
+          toReadResult(url, await handler(url, variables, attachContext(ctx))),
+      )
+    },
+  }
+}

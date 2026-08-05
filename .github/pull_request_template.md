@@ -1,44 +1,45 @@
 <!---
-☝️ PR title should follow conventional commits (https://conventionalcommits.org)
-Here are the available types and scopes:
+☝️ PR 标题应遵循约定式提交规范（https://conventionalcommits.org）
+以下是可用的类型和范围：
 
 
-### Types
-- breaking (fix or feature that would cause existing functionality to change) 💥
-- feat (a non-breaking change that adds functionality) ✨
-- fix (a non-breaking change that fixes an issue) 🐞
-- build (changes that affect the build system or external dependencies) 🏗
-- ci (changes to our CI configuration files and scripts) 🚀
-- docs (updates to the documentation or readme) 📖
-- enhancement (improving an existing functionality) 🌈
-- chore (updates to the build process or auxiliary tools and libraries) 📦
-- perf (a code change that improves performance) ⚡️
-- style (changes that do not affect the meaning of the code) 💅
-- test (adding or updating tests) 🧪
-- refactor (a code change that neither fixes a bug nor adds a feature) 🛠
-- revert (reverts a previous commit) 🔄
+### 类型
+- breaking（会导致现有功能发生变化的修复或功能）💥
+- feat（添加功能的非破坏性变更）✨
+- fix（修复问题的非破坏性变更）🐞
+- build（影响构建系统或外部依赖的变更）🏗
+- ci（对 CI 配置文件和脚本的变更）🚀
+- docs（更新文档或自述文件）📖
+- enhancement（改进现有功能）🌈
+- chore（更新构建流程或辅助工具和库）📦
+- perf（提升性能的代码变更）⚡️
+- style（不影响代码含义的变更）💅
+- test（添加或更新测试）🧪
+- refactor（既不修复错误也不添加功能的代码重构）🛠
+- revert（撤销之前的提交）🔄
 
-### Scopes
-- docs (the documentation)
-- playground (the playground)
-- module (the module)
-- deps (dependencies of the project)
+### 范围
+- deps（项目的依赖项）
+- docs（文档）
+- module（@nuxtjs/mcp-toolkit）
+- nitro（nitro-mcp-toolkit）
+- playground（演练场）
 -->
 
-### 🔗 Linked issue
+### 🔗 关联的问题
 
-<!-- If it resolves an open issue, please link the issue here. For example "Resolves #123" -->
+<!-- 如果该 PR 解决了一个未关闭的问题，请在此处链接该问题。例如“解决 #123” -->
 
-### 📚 Description
+### 📚 描述
 
-<!-- Describe your changes in detail -->
-<!-- Why is this change required? What problem does it solve? -->
+<!-- 详细描述你的变更 -->
+<!-- 为什么需要此变更？它解决了什么问题？ -->
 
-### 📝 Checklist
+### 📝 检查清单
 
-<!-- Put an `x` in all the boxes that apply. -->
-<!-- If your change requires a documentation PR, please link it appropriately -->
-<!-- If you're unsure about any of these, don't hesitate to ask. We're here to help! -->
+<!-- 在所有适用的复选框中填入 `x`。 -->
+<!-- 如果你的变更需要提交文档 PR，请适当添加链接 -->
+<!-- 如果你不确定其中任何一项，请随时提问。我们会尽力提供帮助！ -->
 
-- [ ] I have linked an issue or discussion.
-- [ ] I have updated the documentation accordingly.
+- [ ] 我已关联问题或讨论。
+- [ ] 我已相应更新文档。

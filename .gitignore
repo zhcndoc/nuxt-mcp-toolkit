@@ -18,14 +18,16 @@ node_modules
 # Generated dirs
 dist
 
-# Nuxt
+# Nuxt / Nitro
 .nuxt
+.nitro
 .output
 .data
 .vercel_build_output
 .vercel
 .build-*
 .netlify
+.wrangler
 
 # Env
 .env

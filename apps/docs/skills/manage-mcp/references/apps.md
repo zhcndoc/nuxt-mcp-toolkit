@@ -11,11 +11,11 @@ MCP Apps 位于 **`app/mcp/`**（不是 `server/mcp/`）。它们位于客户端
 ```bash
 app/
 └── mcp/
-    ├── color-picker.vue          # → tool: color-picker，挂载于 /mcp/apps
+    ├── color-picker.vue          # → 工具：color-picker，挂载于 /mcp/apps
     ├── finder/
-    │   └── stay-finder.vue       # → tool: stay-finder，挂载于 /mcp/finder
+    │   └── stay-finder.vue       # → 工具：stay-finder，挂载于 /mcp/finder
     └── checkout/
-        └── stay-checkout.vue     # → tool: stay-checkout，挂载于 /mcp/checkout
+        └── stay-checkout.vue     # → 工具：stay-checkout，挂载于 /mcp/checkout
 ```
 
 `app/mcp/` 下的第一个子目录会成为**命名处理器归属**。直接放在 `app/mcp/` 下的 SFC 会归入隐式的 `apps` 处理器。可通过 `attachTo` 按应用覆盖。
@@ -127,18 +127,21 @@ export default defineMcpHandler({})
 
 ```typescript
 const {
-  data,         // Ref<T | null>            — 从 structuredContent 水合，并由 callTool 刷新
-  loading,      // Ref<boolean>             — 在首次载荷到达前为 true
-  error,        // Ref<Error | null>        — 桥接 / 传输 / 载荷错误
-  pending,      // Ref<boolean>             — 在 callTool() 执行期间为 true
-  hostContext,  // Ref<HostContext | null>  — 主题、显示模式、语言环境，…
+  initialData,  // Ref<T | null>            — 挂载时处理器负载的快照，此后不会更新
+  data,         // Ref<T | null>            — 从 structuredContent 进行水合，并在 callTool 后刷新
+  loading,      // Ref<boolean>             — 在收到首个负载前为 true
+  error,        // Ref<Error | null>        — 桥接 / 传输 / 负载错误
+  pending,      // Ref<boolean>             — callTool() 执行期间为 true
+  hostContext,  // Ref<HostContext | null>  — 主题、显示模式、区域设置等
   callTool,     // (name, params?) => Promise<T | null>
   sendPrompt,   // (prompt: string) => void
   openLink,     // (url: string) => void
 } = useMcpApp<MyPayload>()
 ```
 
-### 适配宿主主题与布局
+对于必须在后续 `callTool` 刷新并覆盖 `data` 后仍然保留的初始值（ID、查询参数），请使用 `initialData`。
+
+### 适配宿主主题和布局
 
 ```vue
 <script setup lang="ts">
