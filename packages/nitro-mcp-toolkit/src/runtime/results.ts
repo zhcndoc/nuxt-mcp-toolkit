@@ -1,5 +1,26 @@
 import { HTTPError } from 'h3'
-import type { CallToolResult, ContentBlock } from '@modelcontextprotocol/server'
+import type { CallToolResult, ContentBlock, InputRequiredResult } from 'h3-mcp'
+
+const TOOL_RESULT = Symbol.for('nitro-mcp-toolkit.toolResult')
+
+/** An explicit protocol envelope, including when a tool declares an output schema. */
+export interface McpToolResult {
+  readonly [TOOL_RESULT]: true
+  readonly result: CallToolResult
+}
+
+export function toolResult(result: CallToolResult): McpToolResult {
+  return { [TOOL_RESULT]: true, result }
+}
+
+function isExplicitResult(value: unknown): value is McpToolResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    TOOL_RESULT in value &&
+    value[TOOL_RESULT] === true
+  )
+}
 
 /**
  * A plain value a handler may return instead of a full `CallToolResult`.
@@ -12,16 +33,23 @@ export type McpToolValue =
   | readonly unknown[]
   | Record<string, unknown>
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * @internal
+ */
+export function isInputRequired(value: unknown): value is InputRequiredResult {
+  return isObject(value) && value.resultType === 'input_required'
+}
+
 function isCallToolResult(value: object): value is CallToolResult {
   return (
     ('content' in value && Array.isArray((value as CallToolResult).content)) ||
     'structuredContent' in value ||
     'isError' in value
   )
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function textBlock(text: string): ContentBlock[] {
@@ -32,13 +60,14 @@ function textBlock(text: string): ContentBlock[] {
  * Coerce a handler return into a `CallToolResult`.
  *
  * A tool that declares an `outputSchema` promises to return that shape, so the
- * value goes straight to `structuredContent` for the SDK to validate. Sniffing
- * it for protocol keys instead would break any schema that happens to describe
- * a `content` array, and the schema could never be satisfied.
+ * value goes straight to `structuredContent` for the engine to validate.
+ * Sniffing it for protocol keys instead would break any schema that happens
+ * to describe a `content` array, and the schema could never be satisfied.
  *
  * @internal
  */
 export function toCallToolResult(value: unknown, hasOutputSchema: boolean): CallToolResult {
+  if (isExplicitResult(value)) return toCallToolResult(value.result, false)
   if (hasOutputSchema && isObject(value)) {
     return { content: textBlock(JSON.stringify(value, null, 2)), structuredContent: value }
   }

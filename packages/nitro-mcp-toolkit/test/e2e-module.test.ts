@@ -87,8 +87,18 @@ describe('a built Nitro app using the module', () => {
 
     expect(tools.map(({ name }) => name)).toEqual(['purge'])
     expect(adminClient.getServerVersion()?.name).toBe('admin-fixture')
-    await expect(adminClient.callTool({ name: 'greet-visitor' })).rejects.toThrow(
-      /greet-visitor not found/,
-    )
+    await expect(adminClient.callTool({ name: 'greet-visitor' })).rejects.toThrow(/Tool not found/)
+  })
+
+  // The admin directory holds a plugins.ts; the endpoint advertising its
+  // extension is what proves the built app installed it, not merely imported it.
+  it('installs the plugins file of the directory it scanned', () => {
+    expect(adminClient.getServerCapabilities()?.extensions).toEqual({
+      'fixture/stamp': { stamped: true },
+    })
+  })
+
+  it('leaves a server without a plugins file advertising no extension', () => {
+    expect(client.getServerCapabilities()?.extensions).toBeUndefined()
   })
 })

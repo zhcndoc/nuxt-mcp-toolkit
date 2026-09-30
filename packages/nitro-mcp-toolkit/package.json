@@ -1,7 +1,7 @@
 {
   "name": "nitro-mcp-toolkit",
-  "version": "0.1.0",
-  "description": "Framework-agnostic MCP server toolkit built directly on Nitro v3 and the MCP SDK v2.",
+  "version": "0.3.0",
+  "description": "Framework-agnostic MCP server toolkit built directly on Nitro v3 and h3-mcp.",
   "keywords": [
     "ai",
     "h3",
@@ -31,6 +31,22 @@
       "types": "./dist/runtime/index.d.mts",
       "import": "./dist/runtime/index.mjs"
     },
+    "./oauth/clerk": {
+      "types": "./dist/runtime/oauth/clerk.d.mts",
+      "import": "./dist/runtime/oauth/clerk.mjs"
+    },
+    "./oauth/okta": {
+      "types": "./dist/runtime/oauth/okta.d.mts",
+      "import": "./dist/runtime/oauth/okta.mjs"
+    },
+    "./oauth/workos": {
+      "types": "./dist/runtime/oauth/workos.d.mts",
+      "import": "./dist/runtime/oauth/workos.mjs"
+    },
+    "./servers": {
+      "types": "./dist/runtime/servers.d.mts",
+      "import": "./dist/runtime/servers.mjs"
+    },
     "./module": {
       "types": "./dist/module/index.d.mts",
       "import": "./dist/module/index.mjs"
@@ -54,34 +70,42 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench:catalog": "node benchmarks/catalog.bench.ts",
+    "bench:consumer": "node benchmarks/consumer.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.0.0",
+    "h3-mcp": "0.2.0",
+    "jose": "^6.2.12",
     "pathe": "^2.0.3",
     "tinyglobby": "^0.2.17"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@modelcontextprotocol/client": "2.0.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "h3": "2.0.1-rc.22",
+    "@modelcontextprotocol/client": "2.1.0",
+    "@valibot/to-json-schema": "^1.8.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "h3": "2.0.1-rc.32",
     "nitro": "3.0.260610-beta",
-    "obuild": "^0.4.38",
-    "oxfmt": "^0.60.0",
-    "oxlint": "^1.75.0",
-    "publint": "^0.3.22",
+    "obuild": "^0.4.40",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
+    "publint": "^0.3.24",
     "typescript": "~6.0.3",
-    "vitest": "^4.1.10",
+    "valibot": "^1.5.0",
+    "vitest": "^4.1.11",
     "zod": "^4.2.0"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/client": "^2.0.0",
-    "h3": "^2.0.1-rc.22",
-    "nitro": "^3.0.0"
+    "@modelcontextprotocol/client": "^2.1.0",
+    "h3": "^2.0.1-rc.32",
+    "nitro": "3.0.260610-beta || ^3.0.0"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/client": {
+      "optional": true
+    },
+    "nitro": {
       "optional": true
     }
   },

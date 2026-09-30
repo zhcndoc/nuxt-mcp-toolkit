@@ -52,30 +52,28 @@ jobs:
 
       - name: Create Release PR or Publish
         id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          title: "chore(repo): version packages"
-          version: pnpm run version
-          publish: pnpm run release
-          # Releases are created here, then their bodies are rewritten below.
-          createGithubReleases: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-title: "chore(repo): version packages"
+          version-script: pnpm run version
+          publish-script: pnpm run release
+          # Releases are created here, then their bodies are rewritten below. The action also
+          # pushes the tags (`push-git-tags` defaults to true); a second `git push --tags` is rejected.
+          create-github-releases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
-      # createGithubReleases gives us one release per package, tagged pkg@version — that part
+      # create-github-releases gives us one release per package, tagged pkg@version — that part
       # we keep. Its *body* is the CHANGELOG section, which for a dependent package is a wall of
       # "Updated dependencies [<hash>, <hash>, …]" and is empty for packages with no changeset
       # of their own. `--generate-notes` is not the answer either: GitHub builds those from a
       # commit range, and with two packages tagged independently, per-package tags interleave and
       # each package's notes would list everybody's PRs. So we rewrite each body from the PRs that
       # actually touched that package's directory, grouped by the same categories as .github/release.yml.
-      - name: Push tags
-        if: steps.changesets.outputs.published == 'true'
-        run: git push --tags
-
       - name: Rewrite release notes
         if: steps.changesets.outputs.published == 'true'
-        run: node scripts/release-notes.mjs '${{ steps.changesets.outputs.publishedPackages }}'
+        run: node scripts/release-notes.mjs '${{ steps.changesets.outputs.published-packages }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -79,6 +79,8 @@ export default defineMcpHandler({
 
 `getMcpTools`、`getMcpResources`、`getMcpPrompts` 返回**原始**定义（保留处理器和 Zod schema）——这正是 `defineMcpHandler` 所期望的。
 
+客户端可以通过 `X-MCP-Tools` 为每个连接筛选目录，值为与 `tools/list` 返回名称匹配的逗号分隔列表。未知名称会返回 HTTP 400。该筛选会在自定义 `tools:` 回调、`enabled()` 和 `mcp:config:resolved` 之后应用，无需自定义处理器。
+
 ## 所有 `defineMcpHandler` 选项
 
 ```typescript

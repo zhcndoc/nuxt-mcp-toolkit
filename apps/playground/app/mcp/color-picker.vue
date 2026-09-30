@@ -13,7 +13,10 @@ defineMcpApp({
 })
 
 const { data, sendPrompt } = useMcpApp<{ initialColor?: string }>()
-const color = ref(data.value?.initialColor ?? '#3b82f6')
+const color = ref('#3b82f6')
+watch(() => data.value?.initialColor, (initialColor) => {
+  if (initialColor) color.value = initialColor
+}, { immediate: true })
 </script>
 
 <template>

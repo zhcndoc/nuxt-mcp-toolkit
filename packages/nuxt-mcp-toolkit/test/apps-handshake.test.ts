@@ -1,6 +1,6 @@
 // Smoke tests for the cross-host composables. We stub `window`/`document`
 // to avoid jsdom — the bridge only needs `addEventListener` and `parent`.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
 
 interface Posted {
@@ -11,6 +11,13 @@ interface Posted {
   type?: string
   payload?: unknown
   messageId?: string
+}
+
+interface JsonRpcReply {
+  jsonrpc: '2.0'
+  id?: string | number
+  result?: unknown
+  error?: { code: number, message: string, data?: unknown }
 }
 
 interface FakeWindow extends EventTarget {
@@ -48,6 +55,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   try {
     const { __resetHostBridgeForTests } = await import('../src/runtime/app/host-bridge')
     __resetHostBridgeForTests()
@@ -58,12 +66,32 @@ afterEach(async () => {
   delete (globalThis as { MessageEvent?: unknown }).MessageEvent
 })
 
-function dispatch(msg: Posted): void {
+function dispatch(msg: Posted | JsonRpcReply): void {
   const event = new (globalThis as { MessageEvent: typeof MessageEvent }).MessageEvent('message', {
     data: msg,
     source: win.parent as unknown as MessageEventSource,
   })
   win.dispatchEvent(event)
+}
+
+/** Answer the last request the view posted for `method`. */
+function reply(method: string, body: Pick<JsonRpcReply, 'result' | 'error'>): void {
+  const request = win.posted.findLast(p => p.method === method)
+  expect(request?.id).toBeDefined()
+  dispatch({ jsonrpc: '2.0', id: request!.id, ...body })
+}
+
+async function completeHandshake(result: Record<string, unknown> = {}): Promise<void> {
+  await flush()
+  reply('ui/initialize', { result })
+  await flush()
+}
+
+async function mountApp() {
+  const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
+  const scope = effectScope()
+  const api = scope.run(() => useMcpApp())!
+  return { api, scope }
 }
 
 describe('useMcpApp (host bridge)', () => {
@@ -100,12 +128,7 @@ describe('useMcpApp (host bridge)', () => {
     })
     expect(win.posted.find(p => p.method === 'ui/notifications/initialized')).toBeUndefined()
 
-    dispatch({
-      jsonrpc: '2.0',
-      id: init!.id,
-      // @ts-expect-error: result is JSON-RPC, not in the outgoing Posted shape
-      result: { hostContext: { theme: 'dark' } },
-    })
+    reply('ui/initialize', { result: { hostContext: { theme: 'dark' } } })
     await flush()
 
     expect(api?.hostContext.value).toEqual({ theme: 'dark' })
@@ -134,6 +157,51 @@ describe('useMcpApp (host bridge)', () => {
     scope.stop()
   })
 
+  it('sets `error` and clears `loading` when the host pushes an error result', async () => {
+    const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
+    const scope = effectScope()
+    let api: ReturnType<typeof useMcpApp> | undefined
+    scope.run(() => {
+      api = useMcpApp()
+    })
+
+    dispatch({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-result',
+      params: { isError: true, content: [{ type: 'text', text: 'Quota exceeded' }] },
+    })
+
+    expect(api?.data.value).toBeNull()
+    expect(api?.loading.value).toBe(false)
+    expect(api?.error.value?.message).toBe('Quota exceeded')
+    scope.stop()
+  })
+
+  it('sets `error` and clears `loading` when the host cancels the tool call', async () => {
+    const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
+    const scope = effectScope()
+    let api: ReturnType<typeof useMcpApp> | undefined
+    scope.run(() => {
+      api = useMcpApp()
+    })
+
+    dispatch({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-cancelled',
+      params: { reason: 'user stopped the response' },
+    })
+
+    expect(api?.loading.value).toBe(false)
+    expect(api?.error.value?.message).toBe('useMcpApp: the tool call was cancelled: user stopped the response')
+
+    let late: ReturnType<typeof useMcpApp> | undefined
+    scope.run(() => {
+      late = useMcpApp()
+    })
+    expect(late?.loading.value).toBe(false)
+    scope.stop()
+  })
+
   it('callTool round-trips structuredContent back into `data`', async () => {
     // Regression: callTool used to be fire-and-forget — filter chips never updated.
     const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
@@ -144,16 +212,11 @@ describe('useMcpApp (host bridge)', () => {
     })
 
     const callPromise = api!.callTool('refilter', { type: 'Villa' })
-    await flush()
+    await completeHandshake()
     const out = win.posted.find(p => p.method === 'tools/call')
     expect(out?.params).toEqual({ name: 'refilter', arguments: { type: 'Villa' } })
 
-    dispatch({
-      jsonrpc: '2.0',
-      id: out!.id,
-      // @ts-expect-error: result is JSON-RPC, not in the outgoing Posted shape
-      result: { structuredContent: { items: 7 } },
-    })
+    reply('tools/call', { result: { structuredContent: { items: 7 } } })
 
     await callPromise
     expect(api?.data.value).toEqual({ items: 7 })
@@ -202,13 +265,26 @@ describe('useMcpApp (host bridge)', () => {
     scope.stop()
   })
 
-  it('keeps `initialData` unchanged when `data` is refreshed by callTool or tool-result', async () => {
-    ;(globalThis as { document: { getElementById: (id: string) => { textContent: string } | null, readyState: string } }).document = {
-      getElementById: (id: string) =>
-        id === '__mcp_app_data__' ? { textContent: JSON.stringify({ listId: 'abc-123' }) } : null,
-      readyState: 'complete',
-    }
+  it('hands the latest tool result to a `useMcpApp()` call made after the push', async () => {
+    const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
+    const scope = effectScope()
+    scope.run(() => useMcpApp())
+    dispatch({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-result',
+      params: { structuredContent: { listId: 'abc-123' } },
+    })
 
+    let late: ReturnType<typeof useMcpApp<{ listId: string }>> | undefined
+    scope.run(() => {
+      late = useMcpApp<{ listId: string }>()
+    })
+    expect(late?.data.value).toEqual({ listId: 'abc-123' })
+    expect(late?.loading.value).toBe(false)
+    scope.stop()
+  })
+
+  it('keeps `initialData` at the first payload when `data` is refreshed by callTool or tool-result', async () => {
     const { useMcpApp } = await import('../src/runtime/app/use-mcp-app')
     const scope = effectScope()
     let api: ReturnType<typeof useMcpApp<{ listId: string, total?: number }>> | undefined
@@ -216,6 +292,12 @@ describe('useMcpApp (host bridge)', () => {
       api = useMcpApp<{ listId: string, total?: number }>()
     })
 
+    expect(api?.initialData.value).toBeNull()
+    dispatch({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/tool-result',
+      params: { structuredContent: { listId: 'abc-123' } },
+    })
     expect(api?.initialData.value).toEqual({ listId: 'abc-123' })
     expect(api?.data.value).toEqual({ listId: 'abc-123' })
 
@@ -228,14 +310,8 @@ describe('useMcpApp (host bridge)', () => {
     expect(api?.initialData.value).toEqual({ listId: 'abc-123' })
 
     const callPromise = api!.callTool('list_todos', { listId: 'abc-123' })
-    await flush()
-    const out = win.posted.find(p => p.method === 'tools/call')
-    dispatch({
-      jsonrpc: '2.0',
-      id: out!.id,
-      // @ts-expect-error: result is JSON-RPC, not in the outgoing Posted shape
-      result: { structuredContent: { total: 5 } },
-    })
+    await completeHandshake()
+    reply('tools/call', { result: { structuredContent: { total: 5 } } })
     await callPromise
 
     expect(api?.data.value).toEqual({ total: 5 })
@@ -354,20 +430,188 @@ describe('internal composables', () => {
 
     const promise = tool!.call({ type: 'Villa' })
     expect(tool!.pending.value).toBe(true)
-    await flush()
+    await completeHandshake()
     const out = win.posted.find(p => p.method === 'tools/call')
     expect(out?.params).toEqual({ name: 'refilter', arguments: { type: 'Villa' } })
 
-    dispatch({
-      jsonrpc: '2.0',
-      id: out!.id,
-      // @ts-expect-error: JSON-RPC reply, not an outgoing message
-      result: { structuredContent: { items: 5 } },
-    })
+    reply('tools/call', { result: { structuredContent: { items: 5 } } })
 
     expect(await promise).toEqual({ items: 5 })
     expect(tool!.result.value).toEqual({ items: 5 })
     expect(tool!.pending.value).toBe(false)
+    scope.stop()
+  })
+
+  it('useToolCall holds `tools/call` until the handshake settles', async () => {
+    // Regression: a tool called on mount raced `ui/initialize` and the host dropped it.
+    const { useToolCall } = await import('../src/runtime/app/use-tool-call')
+    const scope = effectScope()
+    const tool = scope.run(() => useToolCall('refilter'))!
+
+    tool.call({})
+    await flush()
+    expect(win.posted.find(p => p.method === 'tools/call')).toBeUndefined()
+
+    await completeHandshake()
+    expect(win.posted.find(p => p.method === 'tools/call')).toBeDefined()
+    scope.stop()
+  })
+})
+
+describe('useMcpApp (host requests)', () => {
+  it('exposes the capabilities the host announced in `ui/initialize`', async () => {
+    const { api, scope } = await mountApp()
+    expect(api.hostCapabilities.value).toBeNull()
+
+    await completeHandshake({ hostCapabilities: { openLinks: {}, downloadFile: {} } })
+    expect(api.hostCapabilities.value).toEqual({ openLinks: {}, downloadFile: {} })
+    scope.stop()
+  })
+
+  it('merges partial `host-context-changed` updates into `hostContext`', async () => {
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostContext: { theme: 'light', displayMode: 'inline' } })
+
+    dispatch({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'dark' } })
+    dispatch({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { displayMode: 'fullscreen' } })
+    expect(api.hostContext.value).toEqual({ theme: 'dark', displayMode: 'fullscreen' })
+
+    const before = api.hostContext.value
+    dispatch({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'dark' } })
+    expect(api.hostContext.value).toBe(before)
+    scope.stop()
+  })
+
+  it('requestDisplayMode waits for the handshake and resolves with the mode the host set', async () => {
+    const { api, scope } = await mountApp()
+    const promise = api.requestDisplayMode('pip')
+    await flush()
+    expect(win.posted.find(p => p.method === 'ui/request-display-mode')).toBeUndefined()
+
+    await completeHandshake({ hostContext: { displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen', 'pip'] } })
+    expect(win.posted.find(p => p.method === 'ui/request-display-mode')?.params).toEqual({ mode: 'pip' })
+    // claude.ai answers `pip` with `inline`.
+    reply('ui/request-display-mode', { result: { mode: 'inline' } })
+    await expect(promise).resolves.toBe('inline')
+
+    const fullscreen = api.requestDisplayMode('fullscreen')
+    await flush()
+    reply('ui/request-display-mode', { result: { mode: 'fullscreen' } })
+    await expect(fullscreen).resolves.toBe('fullscreen')
+    expect(api.hostContext.value?.displayMode).toBe('fullscreen')
+    scope.stop()
+  })
+
+  it('requestDisplayMode does not ask for a mode the host does not offer', async () => {
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostContext: { displayMode: 'inline', availableDisplayModes: ['inline'] } })
+
+    await expect(api.requestDisplayMode('fullscreen')).resolves.toBe('inline')
+    expect(win.posted.find(p => p.method === 'ui/request-display-mode')).toBeUndefined()
+    scope.stop()
+  })
+
+  it('requestDisplayMode routes through window.openai when ChatGPT injects it', async () => {
+    const requested: unknown[] = []
+    win.openai = {
+      requestDisplayMode: async (params: { mode: string }) => {
+        requested.push(params)
+        return { mode: 'fullscreen' }
+      },
+    }
+
+    const { api, scope } = await mountApp()
+    await expect(api.requestDisplayMode('fullscreen')).resolves.toBe('fullscreen')
+    expect(requested).toEqual([{ mode: 'fullscreen' }])
+    expect(api.hostContext.value?.displayMode).toBe('fullscreen')
+    expect(win.posted.find(p => p.method === 'ui/request-display-mode')).toBeUndefined()
+    scope.stop()
+  })
+
+  it('updateModelContext sends content and structuredContent, and rejects with the JSON-RPC error code', async () => {
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostCapabilities: { updateModelContext: { text: {} } } })
+
+    const update = api.updateModelContext({ structuredContent: { selected: 'b' } })
+    await flush()
+    expect(win.posted.find(p => p.method === 'ui/update-model-context')?.params).toEqual({
+      content: [],
+      structuredContent: { selected: 'b' },
+    })
+    reply('ui/update-model-context', { result: {} })
+    await expect(update).resolves.toBeUndefined()
+
+    const withoutContent = api.updateModelContext({ content: undefined })
+    await flush()
+    expect(win.posted.findLast(p => p.method === 'ui/update-model-context')?.params).toEqual({ content: [] })
+    reply('ui/update-model-context', { result: {} })
+    await withoutContent
+
+    const failing = api.updateModelContext({ content: [{ type: 'text', text: 'b' }] })
+    await flush()
+    reply('ui/update-model-context', { error: { code: -32602, message: 'Invalid params', data: { field: 'content' } } })
+    await expect(failing).rejects.toMatchObject({ message: 'Invalid params', code: -32602, data: { field: 'content' } })
+    scope.stop()
+  })
+
+  it('downloadFile resolves when the host saved the file and rejects when it was cancelled', async () => {
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostCapabilities: { downloadFile: {} } })
+    const file = { type: 'resource' as const, resource: { uri: 'file:///palette.json', mimeType: 'application/json', text: '{}' } }
+
+    const saved = api.downloadFile([file])
+    await flush()
+    expect(win.posted.find(p => p.method === 'ui/download-file')?.params).toEqual({ contents: [file] })
+    reply('ui/download-file', { result: {} })
+    await expect(saved).resolves.toBeUndefined()
+
+    const cancelled = api.downloadFile([file])
+    await flush()
+    reply('ui/download-file', { result: { isError: true } })
+    await expect(cancelled).rejects.toMatchObject({ cancelled: true })
+    scope.stop()
+  })
+
+  it('downloadFile rejects without asking when the host lacks the capability', async () => {
+    // Claude iOS announces no `downloadFile`.
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostCapabilities: {} })
+
+    await expect(api.downloadFile([])).rejects.toMatchObject({ code: -32601 })
+    expect(win.posted.find(p => p.method === 'ui/download-file')).toBeUndefined()
+    scope.stop()
+  })
+
+  it('downloadFile only hands the host http(s) links to fetch', async () => {
+    const { api, scope } = await mountApp()
+    await completeHandshake({ hostCapabilities: { downloadFile: {} } })
+
+    for (const uri of ['javascript:alert(1)', 'file:///etc/passwd', 'data:text/plain,hi', 'not a url']) {
+      await expect(api.downloadFile([{ type: 'resource_link', uri, name: 'file' }])).rejects.toMatchObject({ code: -32602 })
+    }
+    expect(win.posted.find(p => p.method === 'ui/download-file')).toBeUndefined()
+    scope.stop()
+  })
+
+  it('rejects host requests when there is no host window', async () => {
+    delete (win as { parent?: unknown }).parent
+    const { api, scope } = await mountApp()
+
+    await expect(api.requestDisplayMode('fullscreen')).rejects.toThrow('there is no host window')
+    await expect(api.downloadFile([])).rejects.toThrow('there is no host window')
+    scope.stop()
+  })
+
+  it('rejects host requests immediately once the handshake timed out', async () => {
+    vi.useFakeTimers()
+    const { api, scope } = await mountApp()
+    await vi.advanceTimersByTimeAsync(5_000)
+    const posted = win.posted.length
+
+    await expect(api.requestDisplayMode('fullscreen')).rejects.toThrow('handshake did not complete')
+    await expect(api.updateModelContext({})).rejects.toThrow('handshake did not complete')
+    await expect(api.downloadFile([])).rejects.toThrow('handshake did not complete')
+    expect(win.posted).toHaveLength(posted)
     scope.stop()
   })
 })

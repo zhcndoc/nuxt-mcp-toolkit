@@ -1,4 +1,4 @@
-import { addServerHandler, addServerTemplate, createResolver, defineNuxtModule, logger } from '@nuxt/kit'
+import { addServerHandler, addServerPlugin, addServerTemplate, createResolver, defineNuxtModule, hasNuxtModule, logger } from '@nuxt/kit'
 import { defaultMcpConfig, getMcpConfig } from './runtime/server/mcp/config'
 import { setupAutoImports } from './setup/auto-imports'
 import { buildDefaultPaths, setupDefinitionsLoader } from './setup/definitions'
@@ -8,12 +8,19 @@ import { setupNitroAliases } from './setup/nitro-aliases'
 import { name, version } from '../package.json'
 import type { McpIcon } from './runtime/server/mcp/definitions/handlers'
 import type { McpConfig, McpDefaultHandlerStrategy, McpSecurityConfig } from './runtime/server/mcp/config'
+import type { McpAppsOptions } from './setup/mcp-apps/options'
 
 const log = logger.withTag('@nuxtjs/mcp-toolkit')
 
 export const { resolve } = createResolver(import.meta.url)
 
 export type * from './runtime/server/types'
+
+export type McpHeaderValue = string | string[] | null | undefined
+
+export interface McpInspectorConfig {
+  headers?: Record<string, McpHeaderValue>
+}
 
 export interface ModuleOptions {
   /**
@@ -80,6 +87,16 @@ export interface ModuleOptions {
    */
   appsDir?: string
   /**
+   * Customize the isolated Vue bundle used for MCP Apps.
+   * This is a Vue-only build and does not share the Nuxt runtime or module graph.
+   */
+  apps?: McpAppsOptions
+  /**
+   * Configuration for the DevTools inspector launcher.
+   * Useful when the server requires HTTP headers such as `Authorization`.
+   */
+  inspector?: McpInspectorConfig
+  /**
    * How the default `/mcp` handler picks up auto-discovered definitions when
    * named handlers exist (`server/mcp/handlers/<name>/` or `handlers: 'name'` field).
    *
@@ -130,6 +147,17 @@ export interface ModuleOptions {
    * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#security-warning
    */
   security?: McpSecurityConfig
+  /**
+   * Advertise this MCP server in `/llms.txt` when
+   * [`nuxt-llms`](https://github.com/nuxt-content/nuxt-llms) is registered.
+   *
+   * Appends an `## MCP Server` section listing the streamable HTTP endpoint so
+   * agents that discover the site through llms.txt can connect without any
+   * out-of-band configuration. No-op when `nuxt-llms` is not installed.
+   *
+   * @default true
+   */
+  llms?: boolean
   /**
    * Server-side observability for MCP requests via [evlog](https://evlog.dev).
    *
@@ -192,7 +220,7 @@ export default defineNuxtModule<ModuleOptions>({
       getContents: () => `export default ${JSON.stringify(mcpConfig)}`,
     })
 
-    setupDefinitionsLoader(nuxt, buildDefaultPaths(mcpConfig.dir), options, resolver, log, { appsDir })
+    setupDefinitionsLoader(nuxt, buildDefaultPaths(mcpConfig.dir), options, resolver, log, { appsDir, apps: options.apps })
 
     registerTypeReferences(nuxt, resolver)
 
@@ -207,6 +235,10 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     registerServerHandlers(options.route!, resolver)
+
+    if (options.llms !== false && hasNuxtModule('nuxt-llms')) {
+      addServerPlugin(resolver.resolve('runtime/server/plugins/llms'))
+    }
 
     if (nuxt.options.dev) {
       const { addDevToolsCustomTabs } = await import('./runtime/server/mcp/devtools')

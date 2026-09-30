@@ -2,7 +2,7 @@
 
 `defineMcpApp` 让你能够编写 Vue 单文件组件，并将它们作为由你的 MCP 工具处理器提供支持的交互式 iframe，发布到兼容 MCP Apps 的宿主（ChatGPT、Cursor）。自 v0.15 起可用。
 
-该宏会在构建时提取，SFC 会被打包成一个单独的 HTML 文件，而处理器在服务端运行，因此其 `structuredContent` 会在首次渲染时**内联到 iframe 的 HTML 中**——无需额外往返请求。
+该宏会在构建时提取，SFC 会被打包成一个独立 HTML 文件，处理器则在服务端运行。主机会从 `ui://` 资源读取 HTML，并将处理器返回的 `structuredContent` 推送到 iframe。
 
 ## 文件约定
 
@@ -21,6 +21,26 @@ app/
 `app/mcp/` 下的第一个子目录会成为**命名处理器归属**。直接放在 `app/mcp/` 下的 SFC 会归入隐式的 `apps` 处理器。可通过 `attachTo` 按应用覆盖。
 
 可通过 `nuxt.config.ts` 中的 `mcp.appsDir` 覆盖目录。MCP Apps 管线仅在该目录存在时运行——未使用时可被完全 tree-shakable。
+
+## 定制 Vue 构建
+
+如果应用需要全局 CSS、额外的 Vite 插件或不同的挂载入口，可以通过 `mcp.apps` 定制隔离的 Vue 包：
+
+```ts [nuxt.config.ts]
+import ui from '@nuxt/ui/vite'
+
+export default defineNuxtConfig({
+  mcp: {
+    apps: {
+      css: ['~/app/mcp/app.css'],
+      vitePlugins: [ui({ router: false, colorMode: false })],
+      vuePlugins: ['@nuxt/ui/vue-plugin'],
+    },
+  },
+})
+```
+
+请使用 `@nuxt/ui/vite` 等仅适用于 Vue 的集成；iframe 不会与宿主共享 Nuxt 运行时或模块图。工具包始终保留必需的 Vue 和单文件插件。样式表会内联，`~`/`@` 会相对于 Nuxt 源码目录解析。只有在替换生成的 Vue 挂载入口时才使用 `entry`；它不能与 `vuePlugins` 同时使用。
 
 ## 快速开始
 
@@ -75,7 +95,7 @@ const { data, loading, sendPrompt } = useMcpApp<PalettePayload>()
 1. **注册一个 MCP 工具**，名为 `color-picker`（自动从文件名推导）。
 2. 生成一个位于 `ui://mcp-app/color-picker` 的 **UI 资源**（MIME 为 `text/html;profile=mcp-app`）。
 3. 将 SFC + 资源打包成一个单独的 HTML 文件。
-4. **将 `structuredContent` 内联到 iframe 中**，使其以完整数据启动。
+4. 主机推送工具结果后，`useMcpApp()` 会将其中的 `structuredContent` 作为 `data` 提供给 iframe。
 
 ## `defineMcpApp` 选项
 
@@ -127,15 +147,19 @@ export default defineMcpHandler({})
 
 ```typescript
 const {
-  initialData,  // Ref<T | null>            — 挂载时处理器负载的快照，此后不会更新
-  data,         // Ref<T | null>            — 从 structuredContent 进行水合，并在 callTool 后刷新
-  loading,      // Ref<boolean>             — 在收到首个负载前为 true
-  error,        // Ref<Error | null>        — 桥接 / 传输 / 负载错误
-  pending,      // Ref<boolean>             — callTool() 执行期间为 true
-  hostContext,  // Ref<HostContext | null>  — 主题、显示模式、区域设置等
-  callTool,     // (name, params?) => Promise<T | null>
-  sendPrompt,   // (prompt: string) => void
-  openLink,     // (url: string) => void
+  initialData,        // Ref<T | null>            — 视图收到的首个有效载荷快照，此后不会更新
+  data,               // Ref<T | null>            — 主机推送的 structuredContent，可由 callTool 刷新
+  loading,            // Ref<boolean>             — 收到首个有效载荷或调用失败前为 true
+  error,              // Ref<Error | null>        — 桥接、传输或有效载荷错误
+  pending,            // Ref<boolean>             — callTool() 执行期间为 true
+  hostContext,        // Ref<HostContext | null>  — 主题、显示模式、区域设置等
+  hostCapabilities,   // Ref<HostCapabilities | null> — 主机支持的功能
+  callTool,           // (name, params?) => Promise<T | null>
+  sendPrompt,         // (prompt: string) => void
+  openLink,           // (url: string) => void
+  requestDisplayMode, // (mode) => Promise<DisplayMode>
+  updateModelContext, // ({ content?, structuredContent? }) => Promise<void>
+  downloadFile,       // (contents) => Promise<void>
 } = useMcpApp<MyPayload>()
 ```
 
@@ -157,7 +181,7 @@ const isFullscreen = computed(() => hostContext.value?.displayMode === 'fullscre
 </template>
 ```
 
-`hostContext` 在首次渲染时为 `null`，并在握手后填充（约 50ms）。
+`hostContext` 在首次渲染时为 `null`，握手后会填充（约 50ms），并会跟随主机发送的 `host-context-changed` 更新。
 
 ### `sendPrompt(prompt)` — 后续跟进
 
@@ -191,6 +215,15 @@ async function refresh(base: string) {
   了解更多
 </button>
 ```
+
+### 显示模式、模型上下文与文件下载
+
+- `requestDisplayMode(mode)` 会以主机实际设置的模式解析，并更新 `hostContext.displayMode`。
+- `updateModelContext({ content, structuredContent })` 会替换此应用提供给模型下一轮对话的上下文。不要传入不可信文本，因为模型会将其作为上下文读取。
+- `downloadFile(contents)` 会通过主机保存 `resource` / `resource_link` 项目；用户取消时会以 `cancelled: true` 拒绝。链接文件必须使用 `http` 或 `https`。
+- 先检查 `hostCapabilities`：主机不支持时，`updateModelContext` 和 `downloadFile` 会以 `code: -32601` 拒绝。
+- 从 `@nuxtjs/mcp-toolkit/app` 导入的 `useToolCall(name)` 可以调用工具，而不替换 `data`。
+- 在 Claude 中，iframe 发起的工具调用只能到达只读工具（`readOnlyHint: true`）；写入操作应通过 `sendPrompt` 交给模型处理。
 
 ## CSP（内容安全策略）
 
@@ -245,7 +278,7 @@ const { data } = useMcpApp<PalettePayload>()
 
 ### 本地开发
 
-运行 `pnpm dev`，并将 Cursor / Claude / ChatGPT 连接到 `http://localhost:3000/mcp`（或你的自定义路由）。DevTools MCP Inspector 也会内联预览每个应用。
+运行 `pnpm dev`，并将 Cursor / Claude / ChatGPT 连接到 `http://localhost:3000/mcp`（或你的自定义路由）。DevTools MCP Inspector 也会在新标签页中打开，以调用每个应用的工具。
 
 ### 生产环境
 

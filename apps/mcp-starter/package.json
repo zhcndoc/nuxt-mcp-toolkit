@@ -17,12 +17,12 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@nuxtjs/mcp-toolkit": "^0.18.1",
-    "nuxt": "^4.5.1",
+    "@nuxtjs/mcp-toolkit": "^0.22.0",
+    "nuxt": "^4.5.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@nuxt/eslint-config": "^1.16.0",
-    "eslint": "^10.8.0"
+    "@nuxt/eslint-config": "^1.17.0",
+    "eslint": "^10.11.0"
   }
 }

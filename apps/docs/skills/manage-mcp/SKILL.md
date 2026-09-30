@@ -83,7 +83,7 @@ app/mcp/                   # Optional: MCP Apps (interactive Vue widgets)
 
 1. Start the dev server: `pnpm dev`
 2. Hit the endpoint: `curl http://localhost:3000/mcp` (responds to MCP JSON-RPC)
-3. Open Nuxt DevTools (Shift+Alt+D) → **MCP** tab — bundled MCP Inspector for live testing.
+3. Open Nuxt DevTools (Shift+Alt+D) → **MCP Inspector** tab → Launch Inspector (opens in a new browser tab).
 
 ---
 
@@ -418,6 +418,8 @@ export default defineMcpHandler({
 })
 ```
 
+Clients can further subset whatever this endpoint would have served by sending `X-MCP-Tools` (comma-separated names matching `tools/list`). Unknown names return HTTP 400. Applied automatically after `enabled()` and `mcp:config:resolved` — no custom handler needed.
+
 See [handlers reference →](./references/handlers.md).
 
 ---
@@ -472,12 +474,12 @@ See [middleware patterns →](./references/middleware.md).
 Two per-request Nitro hooks fire during the MCP request lifecycle. Subscribe from a `server/plugins/*.ts` plugin to mutate the resolved config or reach the SDK `McpServer` instance from anywhere — no need to own a `defineMcpHandler`. Listeners that throw are logged and the request continues.
 
 ```
-defineMcpHandler middleware → mcp:config:resolved → createMcpServer → mcp:server:created → transport
+defineMcpHandler middleware → mcp:config:resolved → X-MCP-Tools allowlist → createMcpServer → mcp:server:created → transport
 ```
 
 ### `mcp:config:resolved` — mutate tools/resources/prompts per request
 
-Fires after dynamic resolvers and `enabled(event)` guards, before the per-request `McpServer` is built. Mutate `ctx.config` in place.
+Fires after dynamic resolvers and `enabled(event)` guards, before the `X-MCP-Tools` allowlist and the per-request `McpServer` is built. Mutate `ctx.config` in place.
 
 ```typescript [server/plugins/mcp-filter.ts]
 export default defineNitroPlugin((nitroApp) => {
@@ -686,9 +688,9 @@ const { data, sendPrompt } = useMcpApp<{ swatches: { name: string, hex: string }
 </template>
 ```
 
-Each SFC becomes a tool, a UI resource at `ui://mcp-app/<name>`, and a single-file HTML bundle. The handler runs server-side; `structuredContent` is inlined into the HTML so the iframe boots **with full data on the first paint**.
+Each SFC becomes a tool, a UI resource at `ui://mcp-app/<name>`, and a single-file HTML bundle. The handler runs server-side; the host renders the HTML from the `ui://` resource and pushes `structuredContent` into the iframe.
 
-`useMcpApp<T>()` exposes `data`, `loading`, `error`, `hostContext`, `callTool(name, params)`, `sendPrompt(prompt)`, and `openLink(url)`.
+`useMcpApp<T>()` exposes `data`, `loading`, `error`, `hostContext`, `hostCapabilities`, `callTool(name, params)`, `sendPrompt(prompt)`, `openLink(url)`, `requestDisplayMode(mode)`, `updateModelContext(params)`, and `downloadFile(contents)`.
 
 CSP is strict by default — opt extra origins in:
 
@@ -724,6 +726,24 @@ export default defineNuxtConfig({
 ```
 
 Override per-handler when an endpoint needs a different identity (e.g. `/mcp/admin` with its own description and icons).
+
+---
+
+## Agent Discovery (`llms.txt`)
+
+When [`nuxt-llms`](https://github.com/nuxt-content/nuxt-llms) is registered alongside this module, the toolkit appends an `## MCP Server` section to `/llms.txt` pointing at the endpoint, so agents that discover the site through `llms.txt` can connect without a hand-configured URL. Nothing to set up:
+
+```typescript [nuxt.config.ts]
+export default defineNuxtConfig({
+  modules: ['@nuxtjs/mcp-toolkit', 'nuxt-llms'],
+  llms: { domain: 'https://example.com', title: 'Example' },
+  mcp: { name: 'Example MCP', description: 'Query Example data from your agent.' },
+})
+```
+
+The section uses `llms.domain` + `mcp.route` for the URL, `mcp.name` as the label, `mcp.description` as the section description, and adds `mcp.browserRedirect` as a documentation link when set. Set `mcp.llms: false` to opt out; a section you title `MCP Server` yourself always wins. No-op when `nuxt-llms` isn't installed.
+
+This is a discoverability convention, not part of the MCP specification — spec'd discovery (AI Catalog / Server Cards) is still a draft.
 
 ---
 
@@ -951,6 +971,7 @@ export default defineNuxtConfig({
     defaultHandlerStrategy: 'orphans', // or 'all'
     security: { allowedOrigins: ['https://my-app.vercel.app'] },
     logging: true, // requires evlog/nuxt
+    llms: true, // advertise in /llms.txt when nuxt-llms is registered
   },
   nitro: { experimental: { asyncContext: true } },
 })
@@ -979,14 +1000,28 @@ export default defineNuxtConfig({
 
 | Hook | Fires |
 | --- | --- |
-| `mcp:config:resolved` | Per request, after dynamic resolvers — mutate `config.tools / resources / prompts / instructions / icons / name`. |
+| `mcp:config:resolved` | Per request, after dynamic resolvers — mutate `config.tools / resources / prompts / instructions / icons / name`. `X-MCP-Tools` is applied after this hook. |
 | `mcp:server:created` | Per request, after every definition is registered — call `server.registerTool(...)`, `getSdkServer(server).setRequestHandler(...)`, etc. |
 
 ### Debug
 
-- **DevTools**: Shift+Alt+D → MCP tab (bundled MCP Inspector).
+- **DevTools**: Shift+Alt+D → MCP Inspector tab → Launch Inspector (opens in a new browser tab).
 - **CLI Inspector**: `npx @modelcontextprotocol/inspector http://localhost:3000/mcp`
 - **curl smoke test**: `curl -X POST … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`
+
+For an authenticated endpoint, pass headers to the DevTools launcher:
+
+```ts [nuxt.config.ts]
+const token = process.env.MCP_TOKEN
+
+export default defineNuxtConfig({
+  mcp: {
+    inspector: {
+      headers: { Authorization: token ? `Bearer ${token}` : undefined },
+    },
+  },
+})
+```
 
 ## Learn More
 

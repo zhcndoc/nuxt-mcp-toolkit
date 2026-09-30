@@ -1,5 +1,72 @@
 # @nuxtjs/mcp-toolkit
 
+## 0.22.0
+
+### Minor Changes
+
+- [#353](https://github.com/nuxt-modules/mcp-toolkit/pull/353) [`5654bfa`](https://github.com/nuxt-modules/mcp-toolkit/commit/5654bfa161f14cff40217071930de3f279ab4952) Thanks [@johannschopplich](https://github.com/johannschopplich)! - `useMcpApp()` covers display mode, model context and file downloads:
+
+  - `hostCapabilities` holds the capabilities the host announced in `ui/initialize`, so an app can check for a feature before offering it.
+  - `hostContext` follows `ui/notifications/host-context-changed` and merges partial updates. Before, `theme` and `displayMode` kept their handshake values.
+  - `requestDisplayMode(mode)` asks the host for `inline`, `fullscreen` or `pip` and resolves with the mode it set (through `window.openai.requestDisplayMode` in ChatGPT).
+  - `updateModelContext({ content, structuredContent })` replaces the context the app contributes to the model's next turn.
+  - `downloadFile(contents)` saves embedded or linked MCP resources through the host and rejects with `cancelled: true` when the user cancels. Linked files must use `http` or `https`.
+
+  `useToolCall` is now exported from `@nuxtjs/mcp-toolkit/app` to call a tool without replacing `data`. Tool calls wait for the `ui/initialize` handshake, so calling a tool on mount no longer races it. A JSON-RPC error from the host keeps its `code` and `data` — on the rejection of the new methods, and on `error` of `useToolCall` and `useMcpApp` after a failed tool call. The new types `DisplayMode`, `HostCapabilities`, `DownloadFileContent` and `McpAppRequestError` are exported.
+
+- [#355](https://github.com/nuxt-modules/mcp-toolkit/pull/355) [`8c279b6`](https://github.com/nuxt-modules/mcp-toolkit/commit/8c279b6e2e46faaa691a65f763df9e2bf3897fc2) Thanks [@johannschopplich](https://github.com/johannschopplich)! - Stop embedding the view HTML in MCP App tool results. Hosts load the view from the `ui://` resource, so the embedded copy only reached the model's context. `data` is now `null` until the host pushes the tool result, and `initialData` holds the first payload the view receives. An error result or a cancelled call sets `error` and clears `loading` instead of leaving the view loading.
+
+### Patch Changes
+
+- [#351](https://github.com/nuxt-modules/mcp-toolkit/pull/351) [`630af41`](https://github.com/nuxt-modules/mcp-toolkit/commit/630af41c3e9b16b856213c691e326b36bf694d3e) Thanks [@johannschopplich](https://github.com/johannschopplich)! - An MCP App without a `title` is titled from its SFC filename: `create-final-icon.vue` shows as "Create Final Icon" instead of "Create Final Icon.Tool", the name of the generated tool module.
+
+## 0.21.0
+
+### Minor Changes
+
+- [#327](https://github.com/nuxt-modules/mcp-toolkit/pull/327) [`46645c4`](https://github.com/nuxt-modules/mcp-toolkit/commit/46645c44f84c3630d4f1dfbed6e9cae62d1c2a4b) Thanks [@larbish](https://github.com/larbish)! - Advertise the MCP server in `/llms.txt` when [`nuxt-llms`](https://github.com/nuxt-content/nuxt-llms) is registered.
+
+  Agents that discover a site through `llms.txt` can now find its MCP endpoint without a hand-configured URL. Register both modules and an `## MCP Server` section is appended to the file:
+
+  ```md [llms.txt]
+  ## MCP Server
+
+  Query Example data from your agent.
+
+  - [Example MCP](https://example.com/mcp): Streamable HTTP endpoint — connect an MCP client to this URL to call the tools, resources and prompts exposed by this site.
+  - [MCP documentation](https://example.com/docs/mcp): How to connect to this MCP server.
+  ```
+
+  The section is built from `llms.domain` + `mcp.route` (endpoint URL), `mcp.name` (label), `mcp.description` (section description), and `mcp.browserRedirect` (documentation link, when set to something other than `/`).
+
+  Set `mcp.llms: false` to leave `/llms.txt` untouched. A section you title `MCP Server` yourself always wins, and nothing is registered when `nuxt-llms` isn't installed.
+
+  Note this is a discoverability convention, not part of the MCP specification — spec'd discovery through an AI Catalog and Server Cards is still a draft.
+
+## 0.20.0
+
+### Minor Changes
+
+- [#342](https://github.com/nuxt-modules/mcp-toolkit/pull/342) [`4907927`](https://github.com/nuxt-modules/mcp-toolkit/commit/490792745bafcc9870663f02d549650f140da496) Thanks [@miguelrk](https://github.com/miguelrk)! - Customize isolated MCP App bundles with global stylesheets, additional Vite plugins, declarative Vue plugin installation, and custom entries. Vue-only libraries such as Nuxt UI can now run inside app iframes without sharing the host Nuxt runtime.
+
+### Patch Changes
+
+- [#343](https://github.com/nuxt-modules/mcp-toolkit/pull/343) [`1009e4b`](https://github.com/nuxt-modules/mcp-toolkit/commit/1009e4bfafabe52e0ca5fe844bbad84871819980) Thanks [@miguelrk](https://github.com/miguelrk)! - The DevTools MCP Inspector launcher now forwards configured HTTP headers such as `Authorization` when it starts the official inspector process. This keeps authenticated endpoints working from Nuxt DevTools without needing to re-enter the headers in the Inspector UI.
+
+## 0.19.0
+
+### Minor Changes
+
+- [#319](https://github.com/nuxt-modules/mcp-toolkit/pull/319) [`d33e0ca`](https://github.com/nuxt-modules/mcp-toolkit/commit/d33e0ca7e55a3aec357a9e16820d3d8122ed3394) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Clients can send an `X-MCP-Tools` header with a comma-separated list of tool names to limit what `tools/list` exposes. Names must match the catalog (including filename-generated kebab-case); unknown names return HTTP 400. No `server/mcp/index.ts` is required.
+
+### Patch Changes
+
+- [`620cc8a`](https://github.com/nuxt-modules/mcp-toolkit/commit/620cc8a868920053b1f35f0deff8f0d692e9dc68) Thanks [@HugoRCD](https://github.com/HugoRCD)! - MCP Apps with `<script setup lang="ts">` bundle again on Vite 8. The isolated app build no longer inherits the host `tsconfig.json` (which extends `.nuxt/tsconfig.json` before Nuxt has written it).
+
+- [#322](https://github.com/nuxt-modules/mcp-toolkit/pull/322) [`7503516`](https://github.com/nuxt-modules/mcp-toolkit/commit/7503516e5e421b6179e36240f119ff6d15fe5757) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The DevTools MCP Inspector launch always fetches `@modelcontextprotocol/inspector` from registry.npmjs.org, so a private npmrc can no longer 401 the download. Override with `MCP_INSPECTOR_REGISTRY` if you need a mirror.
+
+  The inspector now opens in a new browser tab instead of an iframe inside DevTools — the official UI is a full-page app and does not fit that panel. The MCP URL uses `localhost` so the inspector can reach Nuxt on either IPv4 or IPv6 loopback.
+
 ## 0.18.1
 
 ### Patch Changes
@@ -119,21 +186,14 @@
   ```ts [server/plugins/mcp-whoami.ts]
   export default defineNitroPlugin((nitroApp) => {
     nitroApp.hooks.hook("mcp:server:created", ({ server, event }) => {
-      server.registerTool(
-        "whoami",
-        { description: "Return the current user id" },
-        async () => ({
-          content: [
-            { type: "text", text: String(event.context.userId ?? "anonymous") },
-          ],
-        })
-      );
+      server.registerTool("whoami", { description: "Return the current user id" }, async () => ({
+        content: [{ type: "text", text: String(event.context.userId ?? "anonymous") }],
+      }));
     });
   });
   ```
 
   ### Public API additions
-
   - `McpResolvedConfig` — type of the resolved per-request server config.
   - `getSdkServer(server)` — reach the underlying SDK `Server` instance from an `McpServer`.
 
@@ -323,11 +383,7 @@
   </script>
 
   <template>
-    <button
-      v-for="s in data?.swatches"
-      :key="s.hex"
-      @click="sendPrompt(`Use ${s.name}`)"
-    >
+    <button v-for="s in data?.swatches" :key="s.hex" @click="sendPrompt(`Use ${s.name}`)">
       {{ s.name }}
     </button>
   </template>
@@ -373,7 +429,6 @@
   The MCP Apps pipeline is fully optional: when no `app/mcp/` directory exists, none of the runtime, the macro, or the auto-imports are emitted.
 
   ### Docs
-
   - [Apps guide](https://mcp-toolkit.nuxt.dev/apps/overview) — full authoring walkthrough, host context, follow-ups, host compatibility matrix.
   - [MCP Apps internals](https://mcp-toolkit.nuxt.dev/advanced/mcp-apps-internals) — build pipeline, host bridge protocol, security model, advanced patterns.
 

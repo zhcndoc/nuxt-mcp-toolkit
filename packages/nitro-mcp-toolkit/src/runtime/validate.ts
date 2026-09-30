@@ -33,33 +33,6 @@ function duplicates(values: string[]): string[] {
 }
 
 /**
- * Resolve the identity a definition registers under: what the definition
- * declares, or what the caller derived from its filename.
- *
- * @internal
- */
-export function resolveIdentity(
-  kind: McpDefinition['kind'],
-  definition: { name?: string; title?: string; group?: string },
-  identity?: McpIdentity,
-): McpIdentity {
-  const name = identity?.name ?? definition.name
-
-  if (!name) {
-    throw new Error(
-      `[nitro-mcp-toolkit] This ${kind} has no name. Give it one, or let the module name it ` +
-        `from its filename by placing the file under the scanned ${kind}s directory.`,
-    )
-  }
-
-  return {
-    name,
-    title: identity?.title ?? definition.title,
-    group: identity?.group ?? definition.group,
-  }
-}
-
-/**
  * The `_meta` a definition advertises, so a client can tell apart what a name
  * alone does not. Absent when there is nothing to say.
  *
@@ -68,10 +41,15 @@ export function resolveIdentity(
 export function resolveMeta(
   group: string | undefined,
   tags: string[] | undefined,
+  scopes?: string[],
 ): Record<string, unknown> | undefined {
-  if (!group && !tags?.length) return undefined
+  if (!group && !tags?.length && !scopes?.length) return undefined
 
-  return { ...(group ? { group } : {}), ...(tags?.length ? { tags } : {}) }
+  return {
+    ...(group ? { group } : {}),
+    ...(tags?.length ? { tags } : {}),
+    ...(scopes?.length ? { scopes } : {}),
+  }
 }
 
 function isResource(definition: McpDefinition): definition is McpResource {
@@ -91,6 +69,7 @@ export function summarize(registrations: readonly McpRegistration[]): McpDefinit
     ...(definition.description ? { description: definition.description } : {}),
     ...(identity.group ? { group: identity.group } : {}),
     ...(definition.tags?.length ? { tags: [...definition.tags] } : {}),
+    ...(definition.scopes?.length ? { scopes: [...definition.scopes] } : {}),
     ...(isResource(definition) ? { uri: definition.uri } : {}),
     ...(definition.source ? { file: definition.source.file } : {}),
   }))
@@ -100,9 +79,8 @@ export function summarize(registrations: readonly McpRegistration[]): McpDefinit
  * Check a definition set before it ever serves a request, and pair each
  * definition with the identity it registers under.
  *
- * The SDK registers definitions per request, so a clash would otherwise first
- * surface as an HTTP 500 on the first call, with the real cause nowhere in the
- * message the client receives.
+ * A clash would otherwise first surface as an HTTP 500 on the first call,
+ * with the real cause nowhere in the message the client receives.
  *
  * @internal
  */

@@ -47,10 +47,9 @@ export default defineMcpApp(${mergedArgs})
   const toolFileBody = `import { defineMcpApp, _createAppTool } from ${appsModule}
 ${importsBlock}
 
-const __HTML = Buffer.from(${html64}, 'base64').toString('utf-8')
 const _app = defineMcpApp(${mergedArgs})
 
-export default _createAppTool(_app, { name: ${JSON.stringify(app.name)}, html: __HTML })
+export default _createAppTool(_app, { name: ${JSON.stringify(app.name)} })
 `
 
   const resourceFileBody = `import { defineMcpApp, _createAppResource } from ${appsModule}

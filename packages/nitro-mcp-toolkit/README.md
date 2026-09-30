@@ -2,6 +2,8 @@
 
 Build a [Model Context Protocol](https://modelcontextprotocol.io) server inside any [Nitro](https://nitro.build) v3 app.
 
+[h3-mcp](https://mcp.h3.dev) owns the protocol. This package is discovery and DX on top: drop a file under `server/mcp/{tools,resources,prompts}` and it is served.
+
 Targets protocol revision **2026-07-28** and falls back to the 2025 revisions automatically, so one endpoint serves both generations of clients.
 
 > [!NOTE]
@@ -12,6 +14,8 @@ Targets protocol revision **2026-07-28** and falls back to the 2025 revisions au
 ```bash
 npm install nitro-mcp-toolkit zod
 ```
+
+`h3` is a peer. `nitro` is only needed if you install the module (`nitro-mcp-toolkit/module`); `createMcpHandler` runs on h3 alone.
 
 Any [Standard Schema](https://standardschema.dev) library works — Zod, Valibot, ArkType. Nothing is auto-imported: every helper is imported explicitly.
 
@@ -75,6 +79,24 @@ export default defineMcpTool({
 
 Both are advertised in the definition's `_meta`, so a client sees them in `tools/list` and can sort or filter on them. The group defaults to the subdirectory the file sits in, which is why most files only ever set `tags`.
 
+### Plugins
+
+`server/mcp/plugins.ts`, beside the three directories, installs [h3-mcp](https://github.com/h3js/h3-mcp) extension plugins on that endpoint. Its default export is the array:
+
+```ts
+// server/mcp/plugins.ts
+import { mcpTasks } from 'h3-mcp/tasks'
+import { defineMcpPlugins } from 'nitro-mcp-toolkit'
+
+export default defineMcpPlugins([mcpTasks({ max: 100 })])
+```
+
+The helper only returns what it is given, but it is what checks the file: the generated handler is its only importer, and generated code is not typechecked with the app, so a misspelled `id` or hook would otherwise surface as a runtime failure.
+
+A plugin is a live function, so it cannot be an `mcp()` option — those cross into generated code and are data only. The file is how one reaches a generated handler.
+
+Like a definition, it belongs to whichever `mcp()` scans its directory: two servers get two plugin sets, and a server whose `dir` holds no such file installs none. `.js`, `.mts` and `.mjs` work too, one file per directory, and creating it in development is picked up without a restart. Every build names the file it installed alongside the counts it reports.
+
 ### Options
 
 ```ts
@@ -88,13 +110,13 @@ mcp({
   icons: [{ src: 'https://example.com/icon.png', mimeType: 'image/png', sizes: ['64x64'] }],
   websiteUrl: 'https://example.com',
   instructions: 'What the model is told about this server as a whole',
-  legacy: 'stateless', // or 'reject', for a 2026-07-28-only endpoint
+  era: 'dual', // or 'modern', for a 2026-07-28-only endpoint
   origin: { allow: ['https://app.example.com'] }, // browser clients, see below
   auth: { tokens: [process.env.MCP_TOKEN!] }, // require a credential, see Authentication below
 })
 ```
 
-These cross into generated code, so they are data only. A server that needs `bus` or `onError` mounts the handler by hand instead — see [Wiring it by hand](#wiring-it-by-hand).
+These cross into generated code, so they are data only. A server that needs `validate` or `onListen` mounts the handler by hand instead — see [Wiring it by hand](#wiring-it-by-hand).
 
 ### Browser clients
 
@@ -109,6 +131,25 @@ mcp({ origin: { allow: ['https://app.example.com'] } })
 An origin is matched exactly, scheme and port included. Pass `origin: false` to drop the check — reasonable for a public endpoint where a token, not the origin, is the boundary.
 
 The loopback condition is the load-bearing part of the default: `Origin` can only be compared against the request's own origin when the host is a loopback address. Everywhere else the host comes from a header the caller sets, and DNS rebinding — the attack this check exists to stop — sends the attacker's hostname in both, so a bare same-origin comparison always agrees with itself.
+
+### Limit available tools
+
+Clients can send `X-MCP-Tools` with a comma-separated list of tool names to expose only those tools. Names must match `tools/list`. Unknown names return HTTP 400. Omit the header to keep the full catalog. Resources and prompts are unaffected.
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "url": "https://example.com/mcp",
+      "headers": {
+        "X-MCP-Tools": "search-icons, get-component"
+      }
+    }
+  }
+}
+```
+
+`handler.definitions` is the full catalog either way — filter that array yourself for a JSON route; the header only changes what this request's MCP server registers.
 
 ### More than one server
 
@@ -127,20 +168,20 @@ A server serves exactly what sits under its `dir`, so the admin tools above are 
 
 ### Listing what a server serves
 
-A handler exposes the set it registered as plain JSON — the same set every client sees. Each server is generated under a module id named after its route, so any route can import it:
+A handler exposes the set it registered as plain JSON — the same set every client sees. Import it from `nitro-mcp-toolkit/servers`: the default instance is `mcp`, and any other route is the camelCase of its slug (`/admin/mcp` is `adminMcp`).
 
 ```ts
 // server/routes/catalog.ts
-import mcp from '#mcp/mcp/handler' // `/admin/mcp` is `#mcp/admin-mcp/handler`
+import { mcp } from 'nitro-mcp-toolkit/servers'
 
 export default defineHandler(() =>
   mcp.definitions.filter((definition) => definition.tags?.includes('public')),
 )
 ```
 
-Each entry carries `kind`, `name`, `title`, `description`, `group`, `tags`, the `uri` of a resource, and the `file` it was discovered in. There is no filtering API on purpose: every field is a plain value, so `Array.filter` covers groups, tags and kinds at once.
+Each entry carries `kind`, `name`, `title`, `description`, `group`, `tags`, any `scopes` it requires, the `uri` of a resource, and the `file` it was discovered in. There is no filtering API on purpose: every field is a plain value, so `Array.filter` covers groups, tags and kinds at once.
 
-Those ids are typed by a declaration the package ships, so there is nothing to configure — and a handler mounted by hand exposes the same `definitions`, read off your own route.
+`mcp` is always typed. Extra names such as `adminMcp` are generated into `node_modules/.nitro/types` when you run `nitro prepare` or `nitro dev`. A handler mounted by hand exposes the same `definitions`, read off your own route.
 
 ## Tools
 
@@ -168,15 +209,15 @@ export default defineMcpTool({
 
 Return whatever is natural; the toolkit builds the protocol result.
 
-| You return                  | The client receives           |
-| --------------------------- | ----------------------------- |
-| `string`                    | one text block                |
-| `number`, `boolean`         | one text block, stringified   |
-| `null`, `undefined`         | no content                    |
-| object, array               | one text block of pretty JSON |
-| a full `CallToolResult`     | used as-is                    |
-| `imageResult(base64, mime)` | an image block                |
-| `audioResult(base64, mime)` | an audio block                |
+| You return                  | The client receives                 |
+| --------------------------- | ----------------------------------- |
+| `string`                    | one text block                      |
+| `number`, `boolean`         | one text block, stringified         |
+| `null`, `undefined`         | no content                          |
+| object, array               | one text block of pretty JSON       |
+| a full `CallToolResult`     | used as-is without an output schema |
+| `imageResult(base64, mime)` | an image block                      |
+| `audioResult(base64, mime)` | an audio block                      |
 
 ### Structured output
 
@@ -190,7 +231,25 @@ export default defineMcpTool({
 })
 ```
 
-A return that doesn't actually satisfy a declared `outputSchema` becomes an `isError` result — the same in-band error model as a thrown error, not a transport failure.
+When a tool declares `outputSchema`, use `toolResult()` for a full protocol envelope. Plain objects always mean schema data, even if they contain `content` or `isError` fields:
+
+```ts
+import { defineMcpTool, toolResult } from 'nitro-mcp-toolkit'
+
+const count = defineMcpTool({
+  name: 'count',
+  outputSchema: z.object({ n: z.number() }),
+  handler: () =>
+    toolResult({
+      content: [{ type: 'text', text: 'One item' }],
+      structuredContent: { n: 1 },
+    }),
+})
+```
+
+This also permits explicit `isError` results without treating their envelope as schema data. Existing full-result returns on tools with `outputSchema` need this wrapper.
+
+A return that doesn't actually satisfy a declared `outputSchema` is a protocol error (`-32602`), not an `isError` result — the engine validates the advertised shape after the handler returns.
 
 ### Errors
 
@@ -224,15 +283,16 @@ export default defineMcpResource({
 })
 ```
 
-Pass a `ResourceTemplate` for a family of URIs. `list` powers discovery and `complete` powers argument autocompletion in clients.
+Pass a `uriTemplate` for a family of URIs. `list` powers discovery and `complete` powers argument autocompletion in clients.
 
 ```ts
-import { defineMcpResource, ResourceTemplate } from 'nitro-mcp-toolkit'
+import { defineMcpResource } from 'nitro-mcp-toolkit'
 
 export default defineMcpResource({
-  uri: new ResourceTemplate('docs://{slug}', {
-    list: () => ({ resources: pages.map((slug) => ({ name: slug, uri: `docs://${slug}` })) }),
-    complete: { slug: (value) => pages.filter((page) => page.startsWith(value)) },
+  uriTemplate: 'docs://{slug}',
+  list: () => pages.map((slug) => ({ name: slug, uri: `docs://${slug}` })),
+  complete: (ctx) => ({
+    values: pages.filter((page) => page.startsWith(ctx.argument.value)),
   }),
   handler: (uri, { slug }) => renderPage(String(slug)),
 })
@@ -269,44 +329,44 @@ handler: (event) => {
 
 Everything specific to this call — as opposed to the request in general — sits under `event.context.mcp`:
 
-| Field    | What it is                                                                                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth`   | An SDK `AuthInfo`, only when handed one through the low-level `.fetch(request, { authInfo })` escape hatch. The declarative `auth` option ([Authentication](#authentication)) stashes what it resolves on `event.context` directly instead. |
-| `signal` | Aborts when the client cancels                                                                                                                                                                                                              |
-| `era`    | `'modern'` or `'legacy'`, the revision this client negotiated                                                                                                                                                                               |
-| `notify` | Push a list-changed or resource-updated event — see [Change notifications](#change-notifications)                                                                                                                                           |
-| `mcpReq` | The SDK's own per-request object — the escape hatch for anything not wrapped yet                                                                                                                                                            |
+| Field            | What it is                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| `signal`         | Aborts when the client cancels                                                                    |
+| `era`            | `'modern'` or `'legacy'`, the revision this client negotiated                                     |
+| `notify`         | Push a list-changed or resource-updated event — see [Change notifications](#change-notifications) |
+| `inputResponses` | Answers the client echoed back on a multi-round-trip retry                                        |
+| `requestState`   | Opaque server state the client echoed back — treat it as attacker-controlled                      |
 
 `H3Event['context']['mcp']` is optional in general — most events on the app never go through this package. A `defineMcpTool`/`defineMcpResource`/`defineMcpPrompt` handler's own `event` is typed narrower (`McpEvent`, exported for when you need to name it), so `event.context.mcp` needs no `!` or guard there. Reach for one only where the event is a plain `H3Event` instead — [wiring a route by hand](#wiring-it-by-hand) before the handler runs, or a route unrelated to this endpoint.
 
 ### Multi-round-trip
 
-`event.context.mcp.mcpReq` is where a tool asks the client for something mid-call — confirmation, a sample, a root listing — and picks up where it left off once the answer arrives. `inputRequired`, `inputResponse` and `acceptedContent` (re-exported from `nitro-mcp-toolkit`) build and read that exchange; `mcpReq` carries the raw `requestState`/`inputResponses` for anything they don't cover.
+A tool can pause mid-call and ask the client for something — confirmation, a sample, a root listing — then pick up where it left off once the answer arrives. `inputRequired` and `mcpElicit` build that exchange; `getInputResponses` / `getMissingInputs` read it back. `getElicitedContent` is the shortcut for an idempotent form (it collapses missing, declined, and cancelled into `undefined`, so a refusal looks like a first visit and is asked again).
 
 ```ts
-import { acceptedContent, defineMcpTool, inputRequired } from 'nitro-mcp-toolkit'
+import { defineMcpTool, getInputResponses, inputRequired, mcpElicit } from 'nitro-mcp-toolkit'
 import { z } from 'zod'
+
+const requests = {
+  confirm: mcpElicit({
+    message: 'Delete this?',
+    requestedSchema: {
+      type: 'object',
+      properties: { confirm: { type: 'boolean' } },
+      required: ['confirm'],
+    },
+  }),
+}
 
 export default defineMcpTool({
   inputSchema: z.object({ id: z.string() }),
   handler: ({ id }, event) => {
-    const confirmed = acceptedContent<{ confirm: boolean }>(
-      event.context.mcp.mcpReq.inputResponses,
-      'confirm',
-    )
-    if (!confirmed?.confirm) {
-      return inputRequired({
-        inputRequests: {
-          confirm: inputRequired.elicit({
-            message: `Delete ${id}?`,
-            requestedSchema: {
-              type: 'object',
-              properties: { confirm: { type: 'boolean' } },
-              required: ['confirm'],
-            },
-          }),
-        },
-      })
+    const answer = getInputResponses(event, requests).confirm
+    if (answer === undefined) {
+      return inputRequired(event, { inputRequests: requests })
+    }
+    if (answer.action !== 'accept' || !answer.content?.confirm) {
+      return 'cancelled'
     }
 
     return db.delete(id)
@@ -314,7 +374,9 @@ export default defineMcpTool({
 })
 ```
 
-`requestState` is opaque, server-minted state the client echoes back verbatim — treat it as attacker-controlled input on the way back in. The SDK applies no integrity protection by default, so a server that lets it drive authorization or business logic must sign it itself (HMAC or similar) and reject state that fails verification.
+`canRequestInput` / `getSupportedInputs` are the same capability check `inputRequired` runs, without the throw — use them when the handler can degrade instead of erroring. `event.context.mcp.inputResponses` and `requestState` are the raw fields for anything the helpers don't cover.
+
+`requestState` is opaque, server-minted state the client echoes back verbatim — treat it as attacker-controlled input on the way back in. `defineRequestState` is an HMAC-SHA256 codec for that: seal on the way out, open on the way back, and reject anything that fails verification.
 
 ## Change notifications
 
@@ -328,13 +390,13 @@ handler: ({ id }, event) => {
 }
 ```
 
-`notify.toolsChanged()`, `promptsChanged()` and `resourcesChanged()` take no arguments; `resourceUpdated(uri)` names the one that changed. From outside a handler — a cron job, a webhook route — there is no `event.context.mcp` to reach: that event never passed through this MCP server, so it was never attached one. Import the handler directly instead; it carries the same methods as `handler.notify`, and its `handler.bus` is what they publish to, for wiring a shared bus across processes.
+`notify.toolsChanged()`, `promptsChanged()` and `resourcesChanged()` take no arguments; `resourceUpdated(uri)` names the one that changed. From outside a handler — a cron job, a webhook route — there is no `event.context.mcp` to reach: that event never passed through this MCP server, so it was never attached one. Import the handler directly instead; it carries the same methods as `handler.notify`.
 
 ```ts
 // server/routes/webhook.ts
-import mcp from '#mcp/mcp/handler'
+import { mcp } from 'nitro-mcp-toolkit/servers'
 
-export default (event) => {
+export default () => {
   mcp.notify.resourcesChanged()
 }
 ```
@@ -359,7 +421,7 @@ export default createMcpHandler({ name: 'my-server', version: '1.0.0', tools: [g
 
 Handwritten definitions name themselves, since no filename is there to do it.
 
-The handler also exposes a web-standard `fetch`, so it mounts anywhere else too — `new H3().all('/mcp', handler)`, or straight onto any fetch-native runtime.
+The handler also exposes a web-standard `fetch`, so it mounts anywhere else too — `new H3().all('/mcp', handler)`, or straight onto any fetch-native runtime. Pass `{ extensionPlugins }` as the second argument to install [h3-mcp](https://mcp.h3.dev) extensions such as tasks or MCP Apps.
 
 ## Authentication
 
@@ -393,11 +455,126 @@ createMcpHandler({
 
 Enabling `auth` requires at least one of `tokens` or `validate` — a config with neither throws when the handler is built, rather than accepting everything. A missing or invalid credential gets a `401` with a `www-authenticate` header and no JSON-RPC body, since the request never reached the protocol layer.
 
-`auth` answers "may this caller talk to this endpoint" — nothing more. A valid credential still reaches every tool and resource the server declares; per-operation authorization belongs in your `validate` callback (check scopes there) or in your handlers.
+`auth` answers "may this caller talk to this endpoint" — nothing more. A valid credential otherwise reaches every tool and resource the server declares. To narrow that per operation, declare [scopes](#per-definition-scopes) on the definitions, or check inside your `validate` callback and your handlers.
+
+### OAuth 2.1 resource server
+
+This package is the **resource server**, not the authorization server. It does not mint tokens, serve a login page, or speak DCR. Pair it with an authorization server — Clerk, Okta, WorkOS, Auth0, or [Better Auth's MCP plugin](https://www.better-auth.com/docs/plugins/mcp).
+
+`mcp({ oauth })` is the usual path: JWT access tokens, file-based definitions, RFC 9728 metadata mounted for you. Verified claims land on `event.context.oauth`. `iss` defaults to `authorizationServers`, `aud` to `resource`. JWTs must carry a nonempty `sub` and an `exp`. `jwt.audience: false` requires a `verify` callback that checks resource binding itself; an `azp` allowlist identifies clients, not the resource a token may access. An empty `authorizedParties` list denies every token.
+
+Connectors live on their own subpaths (`nitro-mcp-toolkit/oauth/clerk`, `/okta`, `/workos`) so an app that uses none of them never loads them. Each returns the same options `createMcpOAuth` accepts.
+
+#### Clerk
+
+```ts
+import { clerk } from 'nitro-mcp-toolkit/oauth/clerk'
+
+mcp({
+  oauth: clerk({ resource: 'https://api.example.com/mcp' }),
+})
+```
+
+Issuer and JWKS come from `CLERK_PUBLISHABLE_KEY` or `NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. The token must have `aud` equal to `resource`. Configure your token issuance accordingly; a Clerk session or OAuth token without that audience is refused. `authorizedParties` adds an `azp` allowlist but cannot replace audience validation. RFC 8414 metadata is proxied from Clerk so older MCP clients that look on the resource origin still discover it.
+
+```ts
+defineMcpTool({
+  name: 'whoami',
+  handler: (event) => event.context.oauth?.sub ?? 'anonymous',
+})
+```
+
+A 401 then answers with `WWW-Authenticate: Bearer realm="mcp", resource_metadata="https://api.example.com/.well-known/oauth-protected-resource/mcp"`. Enable CIMD (or DCR only if the client cannot do CIMD) on the Clerk [OAuth applications](https://dashboard.clerk.com/~/oauth-applications) page so clients can register.
+
+#### Okta
+
+Custom authorization servers only (org-server tokens are opaque). JWKS is `{issuer}/v1/keys`. `OKTA_DOMAIN` or `OKTA_ISSUER` fill in what you omit.
+
+```ts
+import { okta } from 'nitro-mcp-toolkit/oauth/okta'
+
+mcp({
+  oauth: okta({
+    resource: 'https://api.example.com/mcp',
+    domain: 'acme.okta.com',
+  }),
+})
+```
+
+#### WorkOS
+
+Use WorkOS Connect access tokens from your AuthKit issuer. Set `WORKOS_AUTHKIT_ISSUER` (for example `https://acme.authkit.app`) or pass `issuer`. Configure the MCP URL as a [WorkOS Resource Indicator](https://workos.com/docs/authkit/mcp). JWKS is `${issuer}/oauth2/jwks`; `aud` must match `resource`. Existing `clientId` / `WORKOS_CLIENT_ID` configuration must migrate: session tokens and tokens with the environment client ID as audience are refused.
+
+```ts
+import { workos } from 'nitro-mcp-toolkit/oauth/workos'
+
+mcp({
+  oauth: workos({ resource: 'https://api.example.com/mcp' }),
+})
+```
+
+#### Any other JWT issuer
+
+```ts
+mcp({
+  oauth: {
+    resource: 'https://api.example.com/mcp',
+    authorizationServers: ['https://auth.example.com'],
+    jwt: { jwks: 'https://auth.example.com/.well-known/jwks.json' },
+  },
+})
+```
+
+#### Opaque tokens, or extra checks
+
+`createMcpOAuth({ verify })` in a route file. Audience validation belongs inside `verify` when `jwt` is omitted — otherwise a token minted for another service is accepted.
+
+```ts
+import { createMcpHandler, createMcpOAuth, defineMcpTool } from 'nitro-mcp-toolkit'
+
+const oauth = createMcpOAuth({
+  resource: 'https://api.example.com/mcp',
+  authorizationServers: ['https://auth.example.com'],
+  jwt: { jwks: 'https://auth.example.com/.well-known/jwks.json' },
+})
+
+export default createMcpHandler({
+  auth: oauth.auth,
+  tools: [defineMcpTool({ name: 'who', handler: (event) => event.context.oauth?.email })],
+})
+```
+
+Mount `oauth.metadataHandler` on `oauth.metadataPath` if you are not using `mcp()`.
+
+### Per-definition scopes
+
+All three helpers take `scopes`. A call is refused unless the access token carries **every** scope listed:
+
+```ts
+export default defineMcpTool({
+  scopes: ['todos:write'],
+  inputSchema: z.object({ id: z.string() }),
+  handler: ({ id }) => remove(id),
+})
+```
+
+The scopes are read off the verified claims on `event.context.oauth`: `scope`, space-delimited as RFC 6749 writes it, and `scp`, which Okta and Entra ID send as a string or an array. A refusal is a JSON-RPC error naming the scopes that were missing — under HTTP 403 on the modern revision, and in the `200` stream that a legacy request gets for every error:
+
+```json
+{
+  "code": -32003,
+  "message": "The tool \"remove-todo\" requires todos:write.",
+  "data": { "requiredScopes": ["todos:write"], "missingScopes": ["todos:write"] }
+}
+```
+
+**A scoped definition is still listed.** `tools/list` shows it to every caller, and the scopes come back in its `_meta` so a client can say why a call would fail. Static metadata stays visible. Resource-template `list` and `complete` callbacks, and prompt-argument `complete` callbacks, also require the definition’s scopes. If any template enumeration lacks scopes, `resources/list` fails before that template’s callback runs; it does not return a partial catalog. The reason static listings stay visible is the engine's order: a handler's options resolve before the request is authenticated, so nothing that builds a listing has seen the token yet. Treat `scopes` as authorization, not as concealment — if a tool's _existence_ is sensitive, put it on a second endpoint behind its own `auth`.
+
+It fails closed: a definition that declares `scopes` on an endpoint with no OAuth has no claims to satisfy it, so every call is refused. `handler.definitions` reports the scopes too, so a catalog route can group by them.
 
 ### Zero-config: `mcp()`
 
-`mcp()`'s options cross into generated code as JSON, so its `auth` is the JSON-serializable subset of what `createMcpHandler` accepts above — a static `tokens` list, no `validate` callback. Omit it and that server stays open, exactly like every other `mcp()` option:
+`mcp()`'s options cross into generated code as JSON, so its `auth` is the JSON-serializable subset of what `createMcpHandler` accepts above — a static `tokens` list, no `validate` callback. `oauth` is the other exception: JWT verification is generated for you. Omit both and that server stays open:
 
 ```ts
 // nitro.config.ts
@@ -413,25 +590,7 @@ export default defineConfig({
 })
 ```
 
-For a `validate` callback, or anything else that is a live function rather than data, mount `createMcpHandler` yourself in a route file instead — the [Authentication](#authentication) examples above are exactly that.
-
-### Protected resource metadata
-
-If you act as an OAuth 2.1 resource server, point clients at your [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) metadata document — served by your own app, not this package — so a `401` is enough to discover your authorization server:
-
-```ts
-auth: {
-  schemes: ['bearer'],
-  validate: verifyToken,
-  resourceMetadataUrl: 'https://example.com/.well-known/oauth-protected-resource',
-}
-```
-
-Every `401` then answers with `WWW-Authenticate: Bearer realm="mcp", resource_metadata="https://example.com/.well-known/oauth-protected-resource"`.
-
-There is no token format, issuer or audience model here — `validate` is opaque credential comparison, so **audience validation belongs inside it**: verify that the presented token was issued for this server (its `aud` claim, or the equivalent introspection result) before returning `true`, or a token minted for another service is accepted, the confused-deputy attack the spec's authorization security considerations call out.
-
-In tests, drive a header through the handler's `fetch` directly, or forge one on the transport's `fetch` — `createMcpTestClient`'s own `{ auth }` option is unrelated, standing in for the SDK's `authInfo` passthrough rather than this gate.
+For a `validate` callback, or anything else that is a live function rather than data, mount `createMcpHandler` yourself in a route file instead — the [Authentication](#authentication) examples above are exactly that. `oauth` on `mcp()` is the exception: JWT verification is generated for you.
 
 ## Testing
 
@@ -453,25 +612,89 @@ it('greets', async () => {
 
 The client closes itself when it leaves scope, so a failing assertion cannot leak it. `textOf` reads the text out of a tool call, a resource read or a prompt alike, for when the shape of the content blocks is not what you are asserting.
 
-Pass `{ era: 'legacy' }` to test the 2025 path, or `{ auth }` to stand in for a verified token.
+Pass `{ era: 'legacy' }` to test the 2025 path. A credential is a header:
+
+```ts
+await using client = await createMcpTestClient(handler, {
+  headers: { authorization: 'Bearer secret' },
+})
+```
 
 ## Protocol revisions
 
-The handler serves 2026-07-28 and, by default, falls back to stateless 2025-era serving. Pass `legacy: 'reject'` for a modern-only endpoint.
+The handler serves 2026-07-28 and, by default, also answers 2025-era clients (`era: 'dual'`). Pass `era: 'modern'` for a 2026-07-28-only endpoint.
 
 ```ts
-export default createMcpHandler({ name: 'my-server', version: '1.0.0', legacy: 'reject' })
+export default createMcpHandler({ name: 'my-server', version: '1.0.0', era: 'modern' })
 ```
 
-Note that MCP clients still negotiate the 2025 revision by default, so a client must opt in to the modern path. The toolkit exports `MODERN_PROTOCOL_VERSION` to pin it — the SDK's `LATEST_PROTOCOL_VERSION` names the newest _legacy_ revision, not this one.
+Note that MCP clients still negotiate the 2025 revision by default, so a client must opt in to the modern path. The toolkit exports `MODERN_PROTOCOL_VERSION` to pin it.
 
 ## Runtimes
 
-Apart from one import the runtime is web-standard: the request context is carried by `AsyncLocalStorage`, so the handler needs `node:async_hooks`. It is the only Node built-in a built bundle pulls in — the SDK, h3 and your definitions add none — and it is there on Node, Deno, Bun, Vercel and Netlify, and on Cloudflare Workers once `nodejs_compat` is enabled. On workerd the SDK also selects a schema validator that generates no code, so nothing in the bundle needs `eval`.
+The runtime uses web-standard APIs and adds no Node built-ins. Packed-package smoke checks cover Node 24.19.0, Deno 2.9.6, Bun 1.4.0 and Cloudflare's local workerd runtime (Wrangler 4.128.0), without `nodejs_compat`. They exercise both protocol revisions, schemas, resources, prompts, opaque-token OAuth, origin checks and tool selection. They do not establish provider-login or deployed-host compatibility.
 
-Presets that emit an `iife` bundle, `winterjs` among them, leave every `node:` import as an undefined global. That is a Nitro packaging limit which any app importing a built-in runs into, and not something this package can work around.
+Bun 1.3.14 fails legacy requests after a size-limited body is cloned; the same checks pass on Bun 1.4.0. Use the tested version or rerun the checks on your deployment's runtime.
+
+A separate Worker entry invokes the same runtime checks. After building the package, run it locally with Wrangler and request the printed URL:
+
+```sh
+wrangler dev packages/nitro-mcp-toolkit/test/fixtures/consumer/worker.ts --compatibility-date 2026-09-04
+```
+
+A successful response is `MCP runtime checks passed`; no Node compatibility flag is required.
 
 Windows is supported: discovery, the imports generated from the paths it finds, and the dev watcher all speak `/` there, and a CI job keeps it that way.
+
+## Composition
+
+Export definitions directly and import the application services they call:
+
+```ts
+// server/mcp/tools/account.ts
+import { defineMcpTool } from 'nitro-mcp-toolkit'
+import { accounts } from '../../services/accounts'
+
+export default defineMcpTool({
+  name: 'account',
+  scopes: ['account:read'],
+  handler: (event) => accounts.nameFor(event.context.oauth!.sub!),
+})
+```
+
+Compose an endpoint with ordinary imports and arrays. Tools, resources and prompts accept readonly collections too; definitions can be reused across endpoints.
+
+```ts
+// server/routes/mcp.ts
+import { createMcpHandler } from 'nitro-mcp-toolkit'
+import account from '../mcp/tools/account'
+import { oauth } from '../utils/oauth'
+
+export default createMcpHandler({
+  auth: oauth.auth,
+  tools: [account],
+})
+```
+
+With file discovery, `mcp()` generates the registration instead. Keep shared collections outside the scanned definition directories; each discovered file exports one definition. Put business logic in services that routes, jobs and MCP handlers can call independently. Read the current user and tenant from the request context, rather than capturing them in a shared definition. Each endpoint supplies its own notifier when it invokes a shared definition.
+
+## Application security
+
+Pair protected definitions with a verifier that establishes `sub`. Scopes authorize an operation; application queries must still enforce the verified user and tenant on every row, resource URI and completion lookup. Client arguments and `X-MCP-Tools` are not identity or tenant boundaries. Catalog metadata is visible to authenticated callers; `handler.definitions` is the full catalog.
+
+Thrown tool error messages, and `HTTPError.data`, are returned to the caller. Catch internal datastore or provider failures at the application boundary and return a deliberate public error. Do not include secrets in errors.
+
+`defineRequestState` signs continuation state but does not encrypt it or make it single-use. Bind state to the authenticated user, tenant and operation, choose an expiry, and use application storage when replay must be prevented. Reauthorize the operation when a continuation resumes.
+
+`handler.notify` broadcasts to subscribers of that handler. Use separate authorized endpoints or an application-controlled subscription filter for tenant-specific notifications; do not broadcast sensitive resource identifiers across tenants.
+
+## Distribution checks
+
+The optional Nitro peer accepts the tested `3.0.260610-beta` and stable `3.x`. `pnpm test:package` packs the package, installs it with ordinary npm peer resolution outside the workspace, checks a runtime-only install, checks public declarations, and builds the real playground with both protocol eras and its protected admin endpoint. It uses Node 24 or later to run TypeScript directly. Set `MCP_TEST_RUNTIMES=bun,deno` to run the same smoke checks with those executables on `PATH`. CI runs the tested Bun and Deno versions as well. Declaration checking currently uses `skipLibCheck` because the upstream H3 declarations reference optional host-runtime types.
+
+For catalog comparisons between Git revisions, run `pnpm bench:nitro <baseline-ref> [candidate-ref]`. See [the benchmark workflow and methodology](https://github.com/nuxt-modules/mcp-toolkit/tree/main/packages/nitro-mcp-toolkit/benchmarks).
+
+For production consumer size, startup samples and HTTP CPU profiles, run `pnpm bench:consumer HEAD --profile` from this repository. See [benchmark methodology](./benchmarks/README.md#built-consumers-and-http-profiles) for scope and reproduction.
 
 ## License
 

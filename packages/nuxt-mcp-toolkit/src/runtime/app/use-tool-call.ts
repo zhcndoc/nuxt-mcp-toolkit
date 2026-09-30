@@ -18,10 +18,9 @@ export interface UseToolCallReturn<T> {
 type ToolCallArgs = [params?: Record<string, unknown>] | [name: string, params?: Record<string, unknown>]
 
 /**
- * Re-invoke an MCP tool on the same server. Routes through `window.openai.callTool`
- * on ChatGPT, otherwise JSON-RPC `tools/call` over `postMessage`. Internal
- * building block behind {@link useMcpApp}; exported for tests only.
- * @internal
+ * Call an MCP tool on the same server without writing the app's `data`. Routes
+ * through `window.openai.callTool` on ChatGPT, otherwise JSON-RPC `tools/call`
+ * over `postMessage` once the `ui/initialize` handshake has settled.
  */
 export function useToolCall<T = unknown>(toolName?: string): UseToolCallReturn<T> {
   const bridge = useHostBridge()
@@ -40,6 +39,8 @@ export function useToolCall<T = unknown>(toolName?: string): UseToolCallReturn<T
     error.value = null
 
     try {
+      // Hosts may drop a `tools/call` that races the handshake.
+      if (!bridge.openai?.callTool) await bridge.whenReady()
       const raw = bridge.openai?.callTool
         ? await bridge.openai.callTool(name, params)
         : await bridge.request('tools/call', { name, arguments: params }, TOOL_CALL_TIMEOUT_MS)

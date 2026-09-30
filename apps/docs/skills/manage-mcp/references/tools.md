@@ -253,3 +253,4 @@ export default defineMcpTool({
 - [注解与输入示例](https://mcp-toolkit.nuxt.dev/tools/annotations)
 - [错误与响应缓存](https://mcp-toolkit.nuxt.dev/tools/errors-caching)
 - [分组、文件与动态注册](https://mcp-toolkit.nuxt.dev/tools/groups-organization)
+- [限制可用工具（`X-MCP-Tools`）](https://mcp-toolkit.nuxt.dev/getting-started/connection#limit-available-tools)

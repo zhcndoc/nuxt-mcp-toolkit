@@ -21,7 +21,7 @@ type McpMiddleware = (
 ## 软认证（推荐）
 
 ::callout{icon="i-lucide-triangle-alert" color="warning"}
-**不要** 在 MCP middleware 中 `throw createError({ statusCode: 401 })`——大多数客户端会把 MCP 路由上的 `401` 解释为“此服务器需要 OAuth”，并开始发现流程。相反，请在成功时设置 context，并让每个工具的 `enabled` 守卫隐藏受保护的工具，或者在需要强制拒绝时返回 `403`。
+对于不带 OAuth 元数据、手动配置的 API key，请在验证成功时设置上下文，并为每个受保护操作添加授权守卫。`401` 可能触发 OAuth 发现。对于 OAuth resource server，这是预期行为：返回带有 `WWW-Authenticate` 元数据 challenge 的 `401`。不要将此 API key 方案中的软认证用于 Nitro 的 `createMcpOAuth` 流程。
 ::
 
 ```typescript [server/mcp/index.ts]

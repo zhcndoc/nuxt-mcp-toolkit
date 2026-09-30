@@ -1,25 +1,32 @@
-import type { StandardSchemaWithJSON } from '@modelcontextprotocol/server'
+import { toStandardJsonSchema } from '@valibot/to-json-schema'
+import type { StandardJSONSchemaV1, StandardTypedV1 } from 'h3-mcp'
+import type { GenericSchema } from 'valibot'
 
-const emptyObject = { type: 'object' as const, properties: {} }
+function isValibotSchema(schema: StandardTypedV1): schema is GenericSchema {
+  return schema['~standard'].vendor === 'valibot' && 'async' in schema && schema.async === false
+}
 
-/**
- * A Standard Schema describing "no arguments".
- *
- * Registering a prompt without an `argsSchema` makes the SDK invoke the
- * callback with a different arity than its own types declare, so an explicit
- * empty schema is passed instead — which is also what the argument-less prompt
- * advertises on the wire.
- *
- * @internal
- */
-export const noArguments: StandardSchemaWithJSON<Record<string, never>> = {
-  '~standard': {
-    version: 1,
-    vendor: 'nitro-mcp-toolkit',
-    validate: () => ({ value: {} }),
-    jsonSchema: {
-      input: () => emptyObject,
-      output: () => emptyObject,
+export function resolveSchema(schema: StandardTypedV1 | undefined): StandardTypedV1 | undefined {
+  if (!schema || !isValibotSchema(schema)) return schema
+
+  const standard = toStandardJsonSchema(schema)['~standard']
+  const convert = (method: 'input' | 'output') => (options: StandardJSONSchemaV1.Options) =>
+    standard.jsonSchema[method]({
+      ...options,
+      libraryOptions: {
+        ...options.libraryOptions,
+        ignoreActions: ['trim'],
+      },
+    })
+
+  const converted: StandardJSONSchemaV1 = {
+    '~standard': {
+      ...standard,
+      jsonSchema: {
+        input: convert('input'),
+        output: convert('output'),
+      },
     },
-  },
+  }
+  return converted
 }

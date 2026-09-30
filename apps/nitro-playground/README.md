@@ -17,10 +17,12 @@ source, and `devServer.watch` reloads the app when that source changes.
 the schema the server advertises: typed inputs for tools, `enum` as a select,
 template variables for resource templates, argument lists for prompts. Results
 render as they arrive — text, images, `structuredContent`, `isError` — and a
-**Wire** panel shows the raw JSON-RPC in both directions.
+**Wire** panel shows the raw JSON-RPC in both directions, HTTP status and elapsed time. Catalogs follow every page, including servers with more than 50 tools.
 
-Two things worth knowing:
+Connection controls:
 
+- Choose `/mcp` or `/admin/mcp` in **Endpoint**, or another path on the same origin.
+- Enter a **Bearer token** for protected endpoints. It stays in memory and is cleared on reload. The default admin token is `dev-admin-token`.
 - The **modern / legacy** switch re-reads the server on the chosen protocol
   revision, so a definition can be compared across both without a restart.
 - The selected definition lives in the hash (`#tool/greet`), so a link or a
@@ -59,7 +61,7 @@ single failing probe.
 | `server/mcp/tools/boom.ts`              | Thrown errors, including `HTTPError` status and data |
 | `server/mcp/tools/pixel.ts`             | Image content blocks                                 |
 | `server/mcp/resources/readme.ts`        | Static URI, string return                            |
-| `server/mcp/resources/doc-page.ts`      | `ResourceTemplate`, listing, completions             |
+| `server/mcp/resources/doc-page.ts`      | `uriTemplate`, listing, completions                  |
 | `server/mcp/prompts/review.ts`          | No arguments, string return                          |
 | `server/mcp/prompts/summarize.ts`       | Arguments, multi-message result                      |
 | `server/mcp-admin/tools/cache/purge.ts` | A second server, and a group from a subdirectory     |

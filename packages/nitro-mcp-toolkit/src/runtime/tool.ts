@@ -1,30 +1,33 @@
-import { isInputRequiredResult } from '@modelcontextprotocol/server'
-import { attachContext } from './context.ts'
-import { toCallToolResult, toErrorResult } from './results.ts'
-import { resolveIdentity, resolveMeta } from './validate.ts'
+import { McpJsonRpcError } from 'h3-mcp'
+import { attachNotify } from './context.ts'
+import { isInputRequired, toCallToolResult, toErrorResult } from './results.ts'
+import { resolveSchema } from './schema.ts'
+import { requireScopes } from './scopes.ts'
+import { resolveMeta } from './validate.ts'
+import type { H3Event } from 'h3'
 import type {
   CallToolResult,
   Icon,
   InputRequiredResult,
-  ServerContext,
-  StandardSchemaWithJSON,
+  StandardTypedV1,
   ToolAnnotations,
-} from '@modelcontextprotocol/server'
+} from 'h3-mcp'
 import type { McpEvent } from './context.ts'
 import type { McpTool } from './definition.ts'
-import type { McpToolValue } from './results.ts'
+import type { McpToolResult, McpToolValue } from './results.ts'
 
-type Schema = StandardSchemaWithJSON
+type Schema = StandardTypedV1
 type Awaitable<T> = T | Promise<T>
 
 /**
  * What a tool handler may return: the shape described by `outputSchema` when
- * one is declared, any plain value otherwise, or a full protocol result.
+ * one is declared, any plain value otherwise. Use `toolResult` for a full
+ * protocol envelope alongside an output schema.
  */
 export type McpToolReturn<Output extends Schema | undefined> =
-  | CallToolResult
+  | McpToolResult
   | InputRequiredResult
-  | (Output extends Schema ? StandardSchemaWithJSON.InferInput<Output> : McpToolValue)
+  | (Output extends Schema ? StandardTypedV1.InferInput<Output> : McpToolValue | CallToolResult)
 
 interface McpToolMetadata {
   /** Identifier the client calls. Derived from the filename when discovered. */
@@ -36,6 +39,16 @@ interface McpToolMetadata {
   group?: string
   /** Free-form labels, advertised in `_meta` for clients to filter on. */
   tags?: string[]
+  /**
+   * OAuth scopes the access token must all carry to call this tool. The tool
+   * still appears in `tools/list`; a call without them is refused.
+   *
+   * @example
+   * ```ts
+   * defineMcpTool({ scopes: ['todos:write'], handler: … })
+   * ```
+   */
+  scopes?: string[]
   annotations?: ToolAnnotations
   icons?: Icon[]
 }
@@ -49,7 +62,7 @@ export interface McpToolDefinition<
   /** Declaring one narrows the handler's return type and validates it. */
   outputSchema?: Output
   handler: (
-    args: StandardSchemaWithJSON.InferOutput<Input>,
+    args: StandardTypedV1.InferOutput<Input>,
     event: McpEvent,
   ) => Awaitable<McpToolReturn<Output>>
 }
@@ -68,9 +81,9 @@ async function settle(
 ): Promise<CallToolResult | InputRequiredResult> {
   try {
     const result = await run()
-    // A multi-round-trip result must reach the client untouched.
-    return isInputRequiredResult(result) ? result : toCallToolResult(result, hasOutputSchema)
+    return isInputRequired(result) ? result : toCallToolResult(result, hasOutputSchema)
   } catch (error) {
+    if (McpJsonRpcError.isMcpJsonRpcError(error)) throw error
     return toErrorResult(error)
   }
 }
@@ -100,7 +113,8 @@ export function defineMcpTool(
     | McpToolDefinition<Schema, Schema | undefined>
     | McpToolDefinitionWithoutInput<Schema | undefined>,
 ): McpTool {
-  const { name, title, description, group, tags, annotations, icons, outputSchema } = definition
+  const { name, title, description, group, tags, scopes, annotations, icons, outputSchema } =
+    definition
   const hasOutputSchema = outputSchema !== undefined
 
   return {
@@ -110,29 +124,41 @@ export function defineMcpTool(
     description,
     group,
     tags,
-    register(server, identity) {
-      const resolved = resolveIdentity('tool', definition, identity)
-      const config = {
-        title: resolved.title,
+    scopes,
+    build(identity, into, notify) {
+      const advertised = {
+        name: identity.name,
+        title: identity.title,
         description,
-        outputSchema,
+        outputSchema: resolveSchema(outputSchema),
         annotations,
         icons,
-        _meta: resolveMeta(resolved.group, tags),
+        _meta: resolveMeta(identity.group, tags, scopes),
       }
 
       if (definition.inputSchema) {
         const { inputSchema, handler } = definition
-        server.registerTool(resolved.name, { ...config, inputSchema }, (args, ctx: ServerContext) =>
-          settle(() => handler(args, attachContext(ctx)), hasOutputSchema),
-        )
+        into.tools.push({
+          ...advertised,
+          inputSchema: resolveSchema(inputSchema),
+          handler: (args: StandardTypedV1.InferOutput<Schema>, event: H3Event) =>
+            settle(() => {
+              requireScopes(event, scopes, 'tool', identity.name)
+              return handler(args, attachNotify(event, notify))
+            }, hasOutputSchema),
+        })
         return
       }
 
       const { handler } = definition
-      server.registerTool(resolved.name, config, (ctx: ServerContext) =>
-        settle(() => handler(attachContext(ctx)), hasOutputSchema),
-      )
+      into.tools.push({
+        ...advertised,
+        handler: (event: H3Event) =>
+          settle(() => {
+            requireScopes(event, scopes, 'tool', identity.name)
+            return handler(attachNotify(event, notify))
+          }, hasOutputSchema),
+      })
     },
   }
 }

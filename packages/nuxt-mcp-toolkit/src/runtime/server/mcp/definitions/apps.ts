@@ -4,6 +4,7 @@ import type { McpRequestExtra } from './sdk-extra'
 import type { McpToolDefinition, McpToolCallback, McpToolAnnotations } from './tools'
 import type { StandardMcpResourceDefinition } from './resources'
 import { normalizeToolResult, type McpToolCallbackResult } from './results'
+import { titleCase } from './utils'
 
 /** MIME advertised for MCP App resources (SEP-1865, ext-apps draft `2026-01-26`). */
 export const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app'
@@ -14,9 +15,7 @@ export const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app'
  */
 export const MCP_APP_BRAND: unique symbol = Symbol.for('nuxt-mcp-toolkit:mcp-app')
 
-const MAX_INJECTED_DATA_BYTES = 1024 * 1024
 const SAFE_APP_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
-const DATA_SCRIPT_ID = '__mcp_app_data__'
 
 /** @internal */
 export function assertSafeAppName(name: string): void {
@@ -31,27 +30,6 @@ export function assertSafeAppName(name: string): void {
 export function buildAppResourceUri(name: string): string {
   assertSafeAppName(name)
   return `ui://mcp-app/${name}`
-}
-
-function escapeJsonForHtml(value: string): string {
-  return value
-    .replace(/\u003C/g, '\\u003c')
-    .replace(/\u003E/g, '\\u003e')
-    .replace(/\u0026/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029')
-}
-
-function injectAppData(html: string, data: unknown): string {
-  const json = escapeJsonForHtml(JSON.stringify(data ?? {}))
-  if (Buffer.byteLength(json, 'utf-8') > MAX_INJECTED_DATA_BYTES) {
-    throw new RangeError(
-      `MCP App initial data exceeds ${MAX_INJECTED_DATA_BYTES} bytes — return a leaner structuredContent or fetch the data lazily.`,
-    )
-  }
-  const tag = `<script id="${DATA_SCRIPT_ID}" type="application/json">${json}</script>`
-  if (html.includes('</body>')) return html.replace('</body>', `${tag}</body>`)
-  return `${html}\n${tag}`
 }
 
 /** Per-app Content Security Policy. Set `false` to opt out (not recommended). */
@@ -242,19 +220,13 @@ type AnyAppHandler = (
   extra: McpRequestExtra,
 ) => McpToolCallbackResult | Promise<McpToolCallbackResult>
 
-function prepareAppHtml(html: string, app: McpAppDefinition, data?: unknown): string {
-  const withCsp = injectCspMeta(html, app.csp)
-  if (data === undefined) return withCsp
-  return injectAppData(withCsp, data)
-}
-
 /**
  * Wrap a {@link McpAppDefinition} into the tool definition the existing pipeline registers.
  * @internal
  */
 export function _createAppTool(
   app: McpAppDefinition,
-  ctx: { name: string, html: string },
+  ctx: { name: string },
 ): McpToolDefinition {
   assertSafeAppName(ctx.name)
   const resourceUri = buildAppResourceUri(ctx.name)
@@ -272,23 +244,12 @@ export function _createAppTool(
 
       const normalised: CallToolResult = normalizeToolResult(userResult)
       const structuredContent = (normalised.structuredContent ?? handlerArgs) as Record<string, unknown>
-      const html = prepareAppHtml(ctx.html, app, structuredContent)
 
+      // Hosts fetch the view via `resources/read`; HTML in `content` would only reach the model.
       return {
         ...normalised,
         structuredContent,
-        content: [
-          {
-            type: 'resource',
-            resource: {
-              uri: resourceUri,
-              mimeType: MCP_APP_MIME_TYPE,
-              text: html,
-              _meta: { ...sharedMeta, ...attributionMeta },
-            },
-          },
-          ...(normalised.content ?? []),
-        ],
+        content: normalised.content ?? [],
         _meta: { ...(normalised._meta ?? {}), ...sharedMeta, ...attributionMeta },
       }
     }
@@ -303,7 +264,8 @@ export function _createAppTool(
 
   return {
     name: app.name ?? ctx.name,
-    title: app.title,
+    // Title from the SFC filename, as file-based tools are titled from theirs.
+    title: app.title ?? titleCase(ctx.name),
     description: app.description,
     inputSchema: app.inputSchema,
     annotations: app.annotations,
@@ -324,7 +286,7 @@ export function _createAppResource(
 ): StandardMcpResourceDefinition {
   assertSafeAppName(ctx.name)
   const resourceUri = buildAppResourceUri(ctx.name)
-  const html = prepareAppHtml(ctx.html, app)
+  const html = injectCspMeta(ctx.html, app.csp)
   const sharedMeta = buildAppMeta(app, resourceUri)
   const attributionMeta = app.attachTo ? { handler: app.attachTo } : {}
 

@@ -1,23 +1,26 @@
-import { resolve } from 'pathe'
-import { discoverDefinitions } from './discover.ts'
+import { basename, resolve } from 'pathe'
+import { discoverDefinitions, discoverPlugins } from './discover.ts'
 import { resolveModuleOptions } from './options.ts'
 import { reportDefinitions } from './report.ts'
-import { renderHandler, renderRegistry } from './template.ts'
+import { registerServer, slugify } from './servers.ts'
+import { protectedResourceMetadataUrl } from '../runtime/oauth-url.ts'
+import {
+  renderAuthorizationServer,
+  renderHandler,
+  renderOAuth,
+  renderOAuthMetadata,
+  renderRegistry,
+} from './template.ts'
 import { watchDefinitions } from './watch.ts'
 import type { McpModuleOptions } from './options.ts'
 import type { NitroModule } from 'nitro/types'
 
-export type { McpModuleOptions, McpServerOptions, ResolvedMcpModuleOptions } from './options.ts'
-
-/** `/admin/mcp` becomes `admin-mcp`, so two instances get distinct module ids. */
-function slugify(route: string): string {
-  return (
-    route
-      .replace(/^\//, '')
-      .replace(/[^a-z0-9]+/gi, '-')
-      .toLowerCase() || 'root'
-  )
-}
+export type {
+  McpModuleOAuthOptions,
+  McpModuleOptions,
+  McpServerOptions,
+  ResolvedMcpModuleOptions,
+} from './options.ts'
 
 /**
  * Serve an MCP endpoint from the files under `dir`: every definition in
@@ -39,8 +42,22 @@ function slugify(route: string): string {
  * })
  * ```
  */
+const AS_METADATA = '/.well-known/oauth-authorization-server'
+
+/** Which plugins file the handler installs, when the convention is unambiguous. */
+function onePluginsFile(route: string, paths: string[]): string | undefined {
+  if (paths.length > 1) {
+    throw new Error(
+      `[nitro-mcp-toolkit] ${route} has more than one plugins file ` +
+        `(${paths.map((path) => basename(path)).join(', ')}). Keep one.`,
+    )
+  }
+
+  return paths[0]
+}
+
 export default function mcp(options: McpModuleOptions = {}): NitroModule {
-  const { route, dir, server } = resolveModuleOptions(options)
+  const { route, dir, server, oauth } = resolveModuleOptions(options)
   const slug = slugify(route)
 
   return {
@@ -48,6 +65,9 @@ export default function mcp(options: McpModuleOptions = {}): NitroModule {
     setup(nitro) {
       const registryId = `#mcp/${slug}/registry`
       const handlerId = `#mcp/${slug}/handler`
+      const oauthId = `#mcp/${slug}/oauth`
+      const metadataId = `#mcp/${slug}/oauth-metadata`
+      const asId = `#mcp/${slug}/oauth-authorization-server`
 
       if (handlerId in nitro.options.virtual) {
         throw new Error(
@@ -60,16 +80,52 @@ export default function mcp(options: McpModuleOptions = {}): NitroModule {
 
       nitro.options.virtual[registryId] = async () =>
         renderRegistry(await discoverDefinitions(definitionsDir))
-      nitro.options.virtual[handlerId] = () => renderHandler(registryId, server)
+      // Async like the registry: a plugins file written after setup is picked
+      // up by the rebuild the watcher triggers, rather than needing a restart.
+      nitro.options.virtual[handlerId] = async () => {
+        const pluginsPath = onePluginsFile(route, await discoverPlugins(definitionsDir))
+
+        return renderHandler(registryId, server, {
+          ...(oauth ? { oauthId } : {}),
+          ...(pluginsPath ? { pluginsPath } : {}),
+        })
+      }
+      registerServer(nitro, { route, slug, handlerId })
 
       nitro.options.handlers.push({
         route,
         handler: handlerId,
-        // Matches Nitro's own file-based routes: the MCP SDK is only loaded
+        // Matches Nitro's own file-based routes: the handler is only loaded
         // once a request actually asks for it.
         lazy: true,
         middleware: false,
       })
+
+      if (oauth) {
+        const metadataPath = protectedResourceMetadataUrl(oauth.resource).pathname
+
+        nitro.options.virtual[oauthId] = () => renderOAuth(oauth)
+        nitro.options.virtual[metadataId] = () => renderOAuthMetadata(oauthId)
+        nitro.options.handlers.push({
+          route: metadataPath,
+          handler: metadataId,
+          lazy: true,
+          middleware: false,
+        })
+
+        if (
+          oauth.authorizationServer &&
+          !nitro.options.handlers.some((handler) => handler.route === AS_METADATA)
+        ) {
+          nitro.options.virtual[asId] = () => renderAuthorizationServer(oauthId)
+          nitro.options.handlers.push({
+            route: AS_METADATA,
+            handler: asId,
+            lazy: true,
+            middleware: false,
+          })
+        }
+      }
 
       reportDefinitions(nitro, route, definitionsDir)
 
