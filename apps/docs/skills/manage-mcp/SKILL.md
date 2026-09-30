@@ -83,7 +83,7 @@ app/mcp/                   # Optional: MCP Apps (interactive Vue widgets)
 
 1. Start the dev server: `pnpm dev`
 2. Hit the endpoint: `curl http://localhost:3000/mcp` (responds to MCP JSON-RPC)
-3. Open Nuxt DevTools (Shift+Alt+D) → **MCP Inspector** tab → Launch Inspector (opens in a new browser tab).
+3. 打开 Nuxt DevTools（Shift+Alt+D）→ **MCP Inspector** 选项卡 → Launch Inspector（会在新的浏览器标签页中打开）。
 
 ---
 
@@ -418,7 +418,7 @@ export default defineMcpHandler({
 })
 ```
 
-Clients can further subset whatever this endpoint would have served by sending `X-MCP-Tools` (comma-separated names matching `tools/list`). Unknown names return HTTP 400. Applied automatically after `enabled()` and `mcp:config:resolved` — no custom handler needed.
+客户端还可以通过发送 `X-MCP-Tools` 进一步筛选此端点原本会提供的工具，值为与 `tools/list` 返回名称匹配的逗号分隔列表。未知名称会返回 HTTP 400。筛选会在 `enabled()` 和 `mcp:config:resolved` 之后自动应用，无需自定义处理器。
 
 See [handlers reference →](./references/handlers.md).
 
@@ -479,7 +479,7 @@ defineMcpHandler middleware → mcp:config:resolved → X-MCP-Tools allowlist �
 
 ### `mcp:config:resolved` — mutate tools/resources/prompts per request
 
-Fires after dynamic resolvers and `enabled(event)` guards, before the `X-MCP-Tools` allowlist and the per-request `McpServer` is built. Mutate `ctx.config` in place.
+此 hook 在动态解析器和 `enabled(event)` 守卫运行之后、应用 `X-MCP-Tools` 允许列表并为当前请求构建 `McpServer` 之前触发。可原地修改 `ctx.config`。
 
 ```typescript [server/plugins/mcp-filter.ts]
 export default defineNitroPlugin((nitroApp) => {
@@ -688,9 +688,9 @@ const { data, sendPrompt } = useMcpApp<{ swatches: { name: string, hex: string }
 </template>
 ```
 
-Each SFC becomes a tool, a UI resource at `ui://mcp-app/<name>`, and a single-file HTML bundle. The handler runs server-side; the host renders the HTML from the `ui://` resource and pushes `structuredContent` into the iframe.
+每个 SFC 都会生成一个工具、一个位于 `ui://mcp-app/<name>` 的 UI 资源，以及一个单文件 HTML 包。handler 在服务端运行；主机会从 `ui://` 资源读取 HTML，并将 `structuredContent` 推送到 iframe。
 
-`useMcpApp<T>()` exposes `data`, `loading`, `error`, `hostContext`, `hostCapabilities`, `callTool(name, params)`, `sendPrompt(prompt)`, `openLink(url)`, `requestDisplayMode(mode)`, `updateModelContext(params)`, and `downloadFile(contents)`.
+`useMcpApp<T>()` 提供 `data`、`loading`、`error`、`hostContext`、`hostCapabilities`、`callTool(name, params)`、`sendPrompt(prompt)`、`openLink(url)`、`requestDisplayMode(mode)`、`updateModelContext(params)` 和 `downloadFile(contents)`。
 
 CSP is strict by default — opt extra origins in:
 
@@ -729,9 +729,9 @@ Override per-handler when an endpoint needs a different identity (e.g. `/mcp/adm
 
 ---
 
-## Agent Discovery (`llms.txt`)
+## Agent 发现（`llms.txt`）
 
-When [`nuxt-llms`](https://github.com/nuxt-content/nuxt-llms) is registered alongside this module, the toolkit appends an `## MCP Server` section to `/llms.txt` pointing at the endpoint, so agents that discover the site through `llms.txt` can connect without a hand-configured URL. Nothing to set up:
+在注册本模块的同时注册 [`nuxt-llms`](https://github.com/nuxt-content/nuxt-llms) 后，工具包会在 `/llms.txt` 中添加 `## MCP Server` 部分并指向此端点。通过 `llms.txt` 发现网站的 agent 无需手动配置 URL 即可连接：
 
 ```typescript [nuxt.config.ts]
 export default defineNuxtConfig({
@@ -741,9 +741,9 @@ export default defineNuxtConfig({
 })
 ```
 
-The section uses `llms.domain` + `mcp.route` for the URL, `mcp.name` as the label, `mcp.description` as the section description, and adds `mcp.browserRedirect` as a documentation link when set. Set `mcp.llms: false` to opt out; a section you title `MCP Server` yourself always wins. No-op when `nuxt-llms` isn't installed.
+此部分使用 `llms.domain` 和 `mcp.route` 生成 URL，使用 `mcp.name` 作为链接标签、`mcp.description` 作为部分说明；如果设置了 `mcp.browserRedirect`，还会将其添加为文档链接。将 `mcp.llms` 设为 `false` 可关闭此功能；如果你自行添加了标题为 `MCP Server` 的部分，则以该部分为准。未安装 `nuxt-llms` 时不会执行任何操作。
 
-This is a discoverability convention, not part of the MCP specification — spec'd discovery (AI Catalog / Server Cards) is still a draft.
+这是用于发现服务器的约定，不属于 MCP 规范；规范中的发现机制（AI Catalog / Server Cards）仍处于草案阶段。
 
 ---
 
@@ -1000,16 +1000,16 @@ export default defineNuxtConfig({
 
 | Hook | Fires |
 | --- | --- |
-| `mcp:config:resolved` | Per request, after dynamic resolvers — mutate `config.tools / resources / prompts / instructions / icons / name`. `X-MCP-Tools` is applied after this hook. |
+| `mcp:config:resolved` | 每个请求触发一次，在动态解析器之后运行；可修改 `config.tools / resources / prompts / instructions / icons / name`。此 hook 执行后才会应用 `X-MCP-Tools`。 |
 | `mcp:server:created` | Per request, after every definition is registered — call `server.registerTool(...)`, `getSdkServer(server).setRequestHandler(...)`, etc. |
 
 ### Debug
 
-- **DevTools**: Shift+Alt+D → MCP Inspector tab → Launch Inspector (opens in a new browser tab).
+- **DevTools**：Shift+Alt+D → MCP Inspector 选项卡 → Launch Inspector（会在新的浏览器标签页中打开）。
 - **CLI Inspector**: `npx @modelcontextprotocol/inspector http://localhost:3000/mcp`
 - **curl smoke test**: `curl -X POST … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`
 
-For an authenticated endpoint, pass headers to the DevTools launcher:
+如果端点需要身份验证，可向 DevTools 启动器传递请求头：
 
 ```ts [nuxt.config.ts]
 const token = process.env.MCP_TOKEN
